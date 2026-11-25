@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.0 — 2026-11-24
+- Hammerspace PS look and versioning, as in hs-cerberus: launch banner with the Hammerspace logo
+  (short header on narrow terminals), title boxes, `[INFO] [OK] [WARN] [ERR]` messages, grouped main menu.
+- `-v` / `--version` and `-h` / `--help`; Python version check; header comment block with project,
+  version, authors and changelog.
+- UTF-8 output under salt, tmux or a C/POSIX locale.
+- The version is recorded in every change record, snapshot, saved plan, compare report and DSX agent log line.
+
 ## 1.0.0 — 2026-11-24
 - First release.
 - Backends: nfs4_getfacl/nfs4_setfacl, Windows icacls, chmod, Hammerspace getrichacl/setrichacl.

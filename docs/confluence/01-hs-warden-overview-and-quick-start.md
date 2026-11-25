@@ -1,6 +1,6 @@
 # hs-warden: Overview and Quick Start
 
-**W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
+**W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator** (current version: 1.1.0; run `python3 hs-warden.py -v`)
 
 ## What it is
 

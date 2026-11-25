@@ -1,4 +1,4 @@
-# hs-warden
+# Hammerspace PS Warden (hs-warden)
 
 **W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
 
@@ -20,6 +20,7 @@ read  ->  plan  ->  preview  ->  confirm  ->  apply  ->  log  ->  undo
 It also has a separate **Compare** function that reads permissions from two copies of a tree (for example a migration source and its destination) and reports what changed.
 
 - Single file, Python 3.6+ standard library only (Anvil / DSX ship Python 3.6.8)
+- Same look as the other Hammerspace PS tools (hs-cerberus): logo banner, title boxes, `[INFO] [OK] [WARN] [ERR]` messages
 - Every change is previewed, logged with before/after snapshots, and can be undone
 - Hammerspace work always runs inside tmux
 
@@ -62,17 +63,24 @@ Type `b` at any prompt to go back.
 ## Menu
 
 ```
-  1) Choose permission tool
-  2) Choose target path(s) / recursive
-  3) View permissions
-  4) Grant or change access
-  5) Remove access
-  6) Edit the full ACL (native text)
-  7) Compare permissions: source vs destination (migration check)
-  8) Change log
-  9) Undo a change
-  q) Quit
+  Setup
+    1) Choose permission tool       (nfs4, icacls, chmod, Hammerspace richacl)
+    2) Choose target path(s)        (and recursive)
+  Permissions
+    3) View permissions
+    4) Grant or change access       (preview, apply, log)
+    5) Remove access
+    6) Edit the full ACL            (native text, SDDL or mode)
+  Data migration
+    7) Compare permissions          (source vs destination: did the migration change them?)
+  History
+    8) Change log
+    9) Undo a change
+
+    q) Quit
 ```
+
+The first screen shows the Hammerspace logo banner with the version; later screens show a title box with the version, the host, the chosen tool and the targets.
 
 | Option | What it does |
 |---|---|
@@ -278,14 +286,15 @@ Keep this folder: undo needs the snapshots.
 ## Command-line options
 
 ```
-python3 hs-warden.py [--log-dir DIR] [--max-items N] [--version]
+python3 hs-warden.py [--log-dir DIR] [--max-items N] [-v|--version] [-h|--help]
 ```
 
 | Option | Default | Meaning |
 |---|---|---|
 | `--log-dir DIR` | `~/.hs-warden` | Logs, snapshots, plans and reports |
 | `--max-items N` | 20000 | Most objects read in one go (per side in Compare). If a change would go past it, WARDEN stops rather than change part of a tree. |
-| `--version` | | Print the version |
+| `-v`, `--version` | | Print the version and exit |
+| `-h`, `--help` | | Show the help and exit |
 
 Environment: `HS_WARDEN_HOME` (log folder), `EDITOR` / `VISUAL` (editor for menu 6), `NO_COLOR`.
 
@@ -312,6 +321,10 @@ Environment: `HS_WARDEN_HOME` (log folder), `EDITOR` / `VISUAL` (editor for menu
 | `The job … ended without a result` | WARDEN shows the last lines of the job log from the DSX; the log is `/var/tmp/hs-warden/jobs/<id>.result.log`. |
 | `Change … was made from <host>; run the undo there` | Undo on the host that made the change (its log folder has the snapshot). |
 
-## Version
+## Versioning
 
-1.0.0 (2026-11-24): first release.
+The version is `TOOLKIT_VERSION` in the script, also shown in the header comment block (with a changelog), the launch banner, the title box on every menu, `-v` / `--version`, and `-h` / `--help`.
+
+Every record WARDEN writes carries the version that wrote it: change records (`warden_version` in `changes.jsonl`, `vX.Y.Z` in `changes.log`), snapshots, saved plans, compare reports, and the DSX `agent.log`. From the Anvil, the copy on the DSX is checked by SHA-256 before each session and re-copied when it differs, so the Anvil and DSX always run the same version.
+
+See [CHANGELOG.md](CHANGELOG.md).

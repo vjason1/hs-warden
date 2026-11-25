@@ -3,11 +3,14 @@
 # ==============================================================================
 # Hammerspace PS Warden
 # W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator
+# File Permission Management, Undo & Migration Permission Audit
 # ==============================================================================
+# Project:         Hammerspace PS Warden (github.com/vjason1/hs-warden)
 # Script:          hs-warden.py
-# Version:         1.0.0
+# Version:         1.1.0
 # Updated:         2026-11-24
-# Authors:         Hammerspace Solutions Engineering (with Claude)
+# Authors:         Jason Ventresco, Hammerspace Solutions Engineering
+#                  (with Claude)
 # Core Engines:    nfs4_getfacl / nfs4_setfacl, icacls, chmod,
 #                  Hammerspace getrichacl / setrichacl (DSX, local or via salt)
 # Target Runtime:  Python 3.6+ (python3 on Hammerspace Anvil & DSX nodes: 3.6.8),
@@ -21,43 +24,77 @@
 #
 #       read  ->  plan  ->  preview  ->  confirm  ->  apply  ->  log  ->  undo
 #
-#   Backends
-#     nfs4     nfs4_getfacl / nfs4_setfacl            Linux NFSv4 clients
-#     icacls   Windows icacls                         Windows
-#     chmod    POSIX mode bits (owner / group / other) Linux, macOS, Anvil, DSX
-#     richacl  Hammerspace getrichacl / setrichacl    DSX only: run locally on a
-#              DSX, or from the active Anvil (Salt master) against a DSX
-#
-#   Hammerspace rules
-#     - getrichacl / setrichacl run only on a DSX node (pd-node-type grain dsx).
-#     - On any Hammerspace node (Anvil or DSX) WARDEN runs inside tmux: it
-#       relaunches itself in a tmux session if started outside one.
-#     - From the Anvil, every DSX job runs in its own detached tmux session on
-#       the DSX (started through salt), so a dropped salt call or SSH session
-#       doesn't stop it; WARDEN polls for the result.
-#     - Paths: /hs/<share>/... on the Anvil is /mnt/smb-data-portal/<share>/...
-#       on the DSX. Either form is accepted; WARDEN translates.
-#
-#   Compare (menu 7)
-#     Reads permissions from two copies of a tree (e.g. migration source and
-#     destination, each with its own tool and host), matches files by relative
-#     path, and reports missing / extra entries, changed rights, inherited-flag
-#     and order changes, owner/group changes and missing files. Writes a
-#     Markdown summary, a CSV of every difference and a JSON copy.
-#
-#   Logs & undo
-#     Every change is logged (who, when, where, exact native commands) with a
-#     before/after snapshot of every object it touched. Undo restores the
-#     "before" snapshot, and first checks nothing has changed since; an undo is
-#     itself logged, so it can be undone too.
-#     Default log folder: ~/.hs-warden   (override: --log-dir or HS_WARDEN_HOME)
-#
 # Usage:
-#   python3 hs-warden.py                 interactive menu
-#   python3 hs-warden.py --log-dir DIR   keep logs, snapshots and reports in DIR
-#   python3 hs-warden.py --max-items N   cap on objects read in one go (20000)
-#   python3 hs-warden.py --version
-#   (internal) --agent --job-file F --result-file R   job runner used on a DSX
+#   sudo python3 hs-warden.py [OPTIONS]
+#
+# Options:
+#   (none)                  Interactive menu
+#   --log-dir DIR           Logs, snapshots, saved plans and reports
+#                           (default ~/.hs-warden, or $HS_WARDEN_HOME)
+#   --max-items N           Most objects read in one go (default 20000)
+#   --agent ...             Node-side job runner, started on a DSX through
+#                           salt in a detached tmux session (internal)
+#   -v, --version           Print the version and exit
+#   -h, --help              Show this help dialogue and exit
+# ==============================================================================
+#
+#  WHAT THIS IS:
+#    Menu  Function
+#    ----  ---------------------------------------------------------------
+#     1    Choose permission tool (nfs4, icacls, chmod, Hammerspace richacl)
+#     2    Choose target path(s) / recursive
+#     3    View permissions (standard table + native text)
+#     4    Grant or change access
+#     5    Remove access
+#     6    Edit the full ACL (native text, SDDL or mode)
+#     7    Compare permissions: source vs destination (migration check)
+#     8    Change log
+#     9    Undo a change
+#
+#  BACKENDS:
+#    nfs4     nfs4_getfacl / nfs4_setfacl             Linux NFSv4 clients
+#    icacls   Windows icacls                          Windows
+#    chmod    POSIX mode bits (owner / group / other) Linux, macOS, Anvil, DSX
+#    richacl  Hammerspace getrichacl / setrichacl     DSX only
+#
+#  HAMMERSPACE RULES:
+#    - getrichacl / setrichacl run only on a DSX node (pd-node-type grain dsx):
+#      locally when WARDEN runs on a DSX, or from the active Anvil (Salt
+#      master) through salt against a DSX picked from the grain list.
+#    - On any Hammerspace node (Anvil or DSX) WARDEN runs inside tmux: it
+#      relaunches itself in tmux session 'hs-warden' if started outside one.
+#    - From the Anvil, every DSX job runs in its own detached tmux session on
+#      the DSX ('warden-<id>'), started through salt; WARDEN polls for the
+#      result, so a dropped salt call or SSH session doesn't stop a change.
+#    - Paths: /hs/<share>/... on the Anvil is /mnt/smb-data-portal/<share>/...
+#      on the DSX. Either form is accepted; WARDEN translates.
+#    - DACL only; the SACL is not read or changed.
+#
+#  LOGS & UNDO:
+#    Every change is previewed (before / after, exact native commands), then
+#    logged with a before/after snapshot of every object it touched. Undo
+#    restores the "before" snapshot after checking nothing changed since; an
+#    undo is itself logged, so it can be undone too. Each object is re-read just
+#    before it's written and skipped if it changed after the preview.
+#
+#  REQUIREMENTS:
+#    Python 3.6+, standard library only. The tool for the chosen backend on the
+#    host that runs it. Hammerspace: the active Anvil (salt, salt-cp) or a DSX;
+#    tmux on the Anvil and the DSX; getrichacl / setrichacl and python3 on the
+#    DSX; write access to /var/tmp/hs-warden on the DSX.
+#
+#  CHANGELOG:
+#    1.1.0 (2026-11-24)  Hammerspace PS look and versioning, as in hs-cerberus:
+#                        launch banner with the Hammerspace logo, title boxes,
+#                        [INFO]/[OK]/[WARN]/[ERR] tags, grouped main menu,
+#                        -v/--version and -h/--help, Python version check,
+#                        UTF-8 output under salt / tmux / C locale. The WARDEN
+#                        version is recorded in every change record, snapshot,
+#                        saved plan, compare report and DSX agent log line.
+#    1.0.0 (2026-11-24)  First release: nfs4, icacls, chmod and Hammerspace
+#                        richacl backends; standard table; grant / remove /
+#                        edit with preview; change log, snapshots and undo;
+#                        source vs destination compare for migrations.
 # ==============================================================================
 
 from __future__ import print_function
@@ -69,6 +106,7 @@ import datetime
 import difflib
 import getpass
 import hashlib
+import io
 import json
 import os
 import platform
@@ -83,8 +121,10 @@ import sys
 import tempfile
 import time
 
-VERSION = "1.0.0"
+TOOLKIT_VERSION = "1.1.0"
+VERSION = TOOLKIT_VERSION
 PROG = "hs-warden"
+DISPLAY_NAME = "Hammerspace PS Warden"
 TITLE = "W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator"
 SELF_PATH = os.path.abspath(__file__)
 IS_WIN = os.name == "nt"
@@ -97,14 +137,28 @@ TMUX_SESSION = "hs-warden"
 DEFAULT_MAX_ITEMS = 20000
 STANDARD_LEVELS = ["Full Control", "Modify", "Read & Execute", "Read", "Write"]
 
-# Python 3.6 uses the locale's encoding for stdout. Under salt, cron or a bare
-# tmux that can be ASCII; make output safe whatever the locale.
-for _s in (sys.stdout, sys.stderr):
-    try:
-        if _s.encoding and _s.encoding.lower().replace("-", "") != "utf8" and not IS_WIN:
-            _s.reconfigure(errors="replace")  # 3.7+
-    except Exception:
-        pass
+# ==============================================================================
+#  COMMON: UTF-8 STREAMS
+# ==============================================================================
+# Python 3.6 uses the locale's encoding for stdout/stdin. Under salt, cron or a
+# fresh tmux the locale is often C/POSIX (ASCII), and the box-drawing characters
+# would raise UnicodeEncodeError. Force UTF-8 with replacement (as hs-cerberus).
+def _utf8_streams():
+    if IS_WIN:
+        return
+    for name in ("stdout", "stderr"):
+        st = getattr(sys, name)
+        enc = (getattr(st, "encoding", "") or "").lower().replace("-", "")
+        if enc != "utf8" and hasattr(st, "buffer"):
+            setattr(sys, name, io.TextIOWrapper(st.buffer, encoding="utf-8", errors="replace",
+                                                line_buffering=True))
+    st = sys.stdin
+    enc = (getattr(st, "encoding", "") or "").lower().replace("-", "")
+    if st is not None and enc != "utf8" and hasattr(st, "buffer"):
+        sys.stdin = io.TextIOWrapper(st.buffer, encoding="utf-8", errors="replace")
+
+
+_utf8_streams()
 
 
 # ==============================================================================
@@ -115,52 +169,80 @@ class C(object):
 
 
 def _init_colors():
-    if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
+    """Colours only on a terminal (salt cmd.run output would show raw codes)."""
+    try:
+        tty = sys.stdout.isatty()
+    except Exception:
+        tty = False
+    if not tty or os.environ.get("NO_COLOR"):
         return
     if IS_WIN:
         try:
             os.system("")  # turns on VT processing in Windows 10+ consoles
         except Exception:
             return
-    C.B, C.R, C.G, C.Y, C.CY, C.D, C.X = ("\033[1m", "\033[31m", "\033[32m", "\033[33m",
-                                          "\033[36m", "\033[2m", "\033[0m")
+    C.B, C.R, C.G, C.Y, C.CY, C.D, C.X = ("\033[1m", "\033[0;31m", "\033[0;32m", "\033[1;33m",
+                                          "\033[0;36m", "\033[2m", "\033[0m")
 
 
 def out(s=""):
-    print(s)
+    """print() that never fails on a closed pipe."""
+    try:
+        print(s)
+    except BrokenPipeError:
+        pass
 
 
 def info(s):
-    print("{}[i]{} {}".format(C.CY, C.X, s))
+    out("{}[INFO]{}  {}".format(C.CY, C.X, s))
 
 
 def ok(s):
-    print("{}[✓]{} {}".format(C.G, C.X, s))
+    out("{}[OK]{}    {}".format(C.G, C.X, s))
 
 
 def warn(s):
-    print("{}[!]{} {}".format(C.Y, C.X, s))
+    out("{}[WARN]{}  {}".format(C.Y, C.X, s))
 
 
 def err(s):
-    print("{}[✗]{} {}".format(C.R, C.X, s))
+    out("{}[ERR]{}   {}".format(C.R, C.X, s))
 
 
 def dim(s):
-    print("{}{}{}".format(C.D, s, C.X))
+    out("{}{}{}".format(C.D, s, C.X))
 
 
 def head(s):
-    w = 78
-    print("")
-    print("{}{}{}".format(C.B, "=" * w, C.X))
-    print("{}  {}{}".format(C.B, s, C.X))
-    print("{}{}{}".format(C.B, "=" * w, C.X))
+    """Section header, hs-cerberus style."""
+    out("\n{}{}══ {} ══{}".format(C.B, C.CY, s, C.X))
 
 
 def sub(s):
-    print("")
-    print("{}-- {} {}{}".format(C.B, s, "-" * max(3, 74 - len(s)), C.X))
+    out("")
+    out("{}── {} {}{}".format(C.B, s, "─" * max(3, 74 - len(s)), C.X))
+
+
+def box(title):
+    """The double-line title box used at the top of each tool (hs-cerberus)."""
+    w = 52
+    out("{}{}".format(C.B, C.CY))
+    out("  ╔" + "═" * w + "╗")
+    out("  ║" + title.center(w) + "║")
+    out("  ╚" + "═" * w + "╝")
+    out(C.X)
+
+
+def clear():
+    try:
+        if sys.stdout.isatty():
+            if IS_WIN:
+                os.system("cls")
+            else:
+                sys.stdout.write("\033[H\033[2J")
+                sys.stdout.flush()
+    except Exception:
+        pass
 
 
 # ==============================================================================
@@ -1065,7 +1147,8 @@ def agent_main(args):
     if job["op"] in ("set", "cmds"):
         try:
             with open(os.path.join(REMOTE_DIR, "agent.log"), "a") as lf:
-                lf.write(json.dumps({"time": now_iso(), "change": job.get("change_id"), "op": job["op"],
+                lf.write(json.dumps({"time": now_iso(), "warden_version": TOOLKIT_VERSION,
+                                     "change": job.get("change_id"), "op": job["op"],
                                      "by": job.get("by"), "from": job.get("from"),
                                      "paths": [i["path"] for i in job.get("items", [])][:50] or job.get("cmds", [])[:20],
                                      "error": res.get("error")}) + "\n")
@@ -1367,7 +1450,7 @@ class Log(object):
         with open(self.jsonl, "a") as f:
             f.write(json.dumps(rec) + "\n")
         with open(self.text, "a") as f:
-            f.write("{time}  {id}  {user}@{host}  {backend} via {where}  {kind}: {summary}  "
+            f.write("{time}  {id}  v{warden_version}  {user}@{host}  {backend} via {where}  {kind}: {summary}  "
                     "[ok {ok}, failed {failed}, skipped {skipped}]{undo}\n".format(
                         undo="  (undo of {})".format(rec["undo_of"]) if rec.get("undo_of") else "",
                         ok=rec["results"].get("ok", 0), failed=rec["results"].get("failed", 0),
@@ -1784,8 +1867,9 @@ def save_script(plan, cmds):
     with open(fn, "w") as f:
         if not IS_WIN:
             f.write("#!/bin/bash\n")
-        f.write("{c} {p} plan: {s}\n{c} Created {t} by {u}@{h}\n{c} Tool: {b}\n".format(
-            c=c, p=PROG, s=plan["summary"], t=now_iso(), u=getpass.getuser(), h=HOST, b=S.be.label))
+        f.write("{c} {p} v{v} plan: {s}\n{c} Created {t} by {u}@{h}\n{c} Tool: {b}\n".format(
+            c=c, p=DISPLAY_NAME, v=TOOLKIT_VERSION, s=plan["summary"], t=now_iso(), u=getpass.getuser(), h=HOST,
+            b=S.be.label))
         if isinstance(S.ex, SaltExec):
             f.write("{c} Run on DSX {n} (inside tmux). Paths are DSX paths.\n".format(c=c, n=S.ex.node))
         f.write("\n" + "\n".join(cmds) + "\n")
@@ -1824,7 +1908,8 @@ def review_and_apply(plan):
 def apply_plan(plan, kind=None, undo_of=None):
     be, ex = S.be, S.ex
     cid = new_id()
-    meta = {"change_id": cid, "by": "{}@{}".format(getpass.getuser(), HOST), "from": HOST}
+    meta = {"change_id": cid, "by": "{}@{}".format(getpass.getuser(), HOST), "from": HOST,
+            "warden_version": TOOLKIT_VERSION}
     snap_items = []
     tally = {"ok": 0, "failed": 0, "skipped": 0}
     unconfirmed = False
@@ -1871,14 +1956,16 @@ def apply_plan(plan, kind=None, undo_of=None):
             if i["changed"] or not be.full_set:
                 snap_items.append({"path": i["path"], "before": i["before"], "after": None, "status": "unconfirmed"})
         tally["unconfirmed"] = len(snap_items)
-    rec = {"id": cid, "time": now_iso(), "user": getpass.getuser(), "host": HOST, "backend": be.key,
+    rec = {"id": cid, "time": now_iso(), "warden_version": TOOLKIT_VERSION, "user": getpass.getuser(),
+           "host": HOST, "backend": be.key,
            "where": ex.where, "kind": kind or plan["kind"], "summary": plan["summary"],
            "targets": [i["path"] for i in plan["items"] if i.get("top")][:50],
            "recursive": plan.get("recursive", S.recursive), "objects": len(snap_items),
            "commands": plan_commands(plan)[:200], "results": tally}
     if undo_of:
         rec["undo_of"] = undo_of
-    S.log.record(rec, {"id": cid, "backend": be.key, "where": ex.where, "items": snap_items})
+    S.log.record(rec, {"id": cid, "warden_version": TOOLKIT_VERSION, "backend": be.key, "where": ex.where,
+                       "items": snap_items})
     if not unconfirmed:
         (ok if not tally["failed"] else warn)("Done: {ok} changed, {failed} failed, {skipped} skipped "
                                               "(changed since the preview).".format(**tally))
@@ -1958,7 +2045,6 @@ def do_grant():
         sub("Current: " + it["path"])
         meta, ents = parse_item(be, it)
         print_table(be, ents, it["is_dir"], meta=meta)
-    head("GRANT / CHANGE ACCESS")
     who, group = ask_principal(be)
     typ = "allow"
     if be.supports_deny:
@@ -2136,7 +2222,7 @@ def do_log():
     if not recs:
         info("No changes logged yet in " + S.log.base)
         return
-    head("CHANGE LOG  ({})".format(S.log.base))
+    dim("  Log folder: " + S.log.base)
     shown = recs[-30:][::-1]
     for i, r in enumerate(shown):
         out("  {:>3}) {}".format(i + 1, rec_line(r)))
@@ -2162,7 +2248,6 @@ def do_undo():
     if not recs:
         info("No changes to undo in " + S.log.base)
         return
-    head("UNDO A CHANGE")
     shown = recs[-20:][::-1]
     for i, r in enumerate(shown):
         out("  {:>3}) {}".format(i + 1, rec_line(r)))
@@ -2350,7 +2435,6 @@ def rel_of(path, root, fold):
 
 
 def do_compare():
-    head("COMPARE PERMISSIONS: SOURCE vs DESTINATION")
     dim("  Reads both trees, matches files by path relative to each root, and reports")
     dim("  what differs. Read-only: nothing is changed.")
     be_a, ex_a, root_a = compare_side("Source (e.g. before migration)", S.be.key if S.be else None)
@@ -2466,9 +2550,9 @@ def write_compare_report(rows, counts, opts, A, B, recursive, depth, owner):
             w.writerow([r["path"], r["status"], " ; ".join(r["details"]), r["source"], r["destination"]])
     md = os.path.join(d, "summary.md")
     with open(md, "w") as f:
-        f.write("# {} permission comparison {}\n\n".format(PROG, rid))
+        f.write("# {} permission comparison {}\n\n".format(DISPLAY_NAME, rid))
         f.write("| | |\n|---|---|\n")
-        f.write("| Run | {} by {}@{} |\n".format(now_iso(), getpass.getuser(), HOST))
+        f.write("| Run | {} by {}@{} (Warden v{}) |\n".format(now_iso(), getpass.getuser(), HOST, TOOLKIT_VERSION))
         f.write("| Source | `{}` ({} on {}) |\n".format(A[2], A[0].label, A[1].describe()))
         f.write("| Destination | `{}` ({} on {}) |\n".format(B[2], B[0].label, B[1].describe()))
         f.write("| Scope | {}{} |\n".format("recursive" if recursive else "top only",
@@ -2491,12 +2575,12 @@ def write_compare_report(rows, counts, opts, A, B, recursive, depth, owner):
                     f.write("- {}\n".format(x.replace("|", "\\|")))
                 f.write("\n")
     with open(os.path.join(d, "compare.json"), "w") as f:
-        json.dump({"id": rid, "source": {"root": A[2], "backend": A[0].key, "where": A[1].where},
+        json.dump({"id": rid, "warden_version": TOOLKIT_VERSION, "source": {"root": A[2], "backend": A[0].key, "where": A[1].where},
                    "destination": {"root": B[2], "backend": B[0].key, "where": B[1].where},
                    "options": dict(opts, map=[list(x) for x in opts["map"]]), "counts": counts, "rows": rows}, f, indent=1)
     with open(S.log.text, "a") as f:
-        f.write("{}  {}  {}@{}  compare: {} ({}) vs {} ({})  {}\n".format(
-            now_iso(), rid, getpass.getuser(), HOST, A[2], A[1].where, B[2], B[1].where,
+        f.write("{}  {}  v{}  {}@{}  compare: {} ({}) vs {} ({})  {}\n".format(
+            now_iso(), rid, TOOLKIT_VERSION, getpass.getuser(), HOST, A[2], A[1].where, B[2], B[1].where,
             ", ".join("{} {}".format(k, v) for k, v in sorted(counts.items()))))
     ok("Report: {}".format(d))
     dim("  summary.md, differences.csv (opens in Excel), compare.json")
@@ -2505,40 +2589,114 @@ def write_compare_report(rows, counts, opts, A, B, recursive, depth, owner):
 # ==============================================================================
 #  MAIN MENU
 # ==============================================================================
+BANNER_W = 87
+LOGO = r"""        _____________
+       /             \
+       \     _____    \
+        \    \    \    \
+         \    \    \    \
+   ___    \____\    \    \
+  /   \              \    \
+  \    \     _____    \___/
+   \    \    \    \
+    \    \    \    \
+     \    \____\    \
+      \              \
+       \_____________/"""
+
+
 def banner():
-    head("{} {}  —  {}".format(PROG, VERSION, TITLE))
+    """Launch banner: Hammerspace logo in a star frame; a short header on
+    terminals narrower than the frame (same layout as hs-cerberus)."""
+    inner = BANNER_W - 2
+    year = time.strftime("%Y")
+    cols = shutil.get_terminal_size((80, 24)).columns
+    L = [""]
+    if cols >= BANNER_W:
+        stars = "*" * BANNER_W
+
+        def line(t):
+            return "*{:<{w}}*".format(t, w=inner)
+
+        def center(t):
+            return "*" + t.center(inner) + "*"
+        L += [stars, center("Copyright (C) 2016-{} Hammerspace, Inc.".format(year)), line("")]
+        L += [line(" " * 28 + l) for l in LOGO.splitlines()]
+        L += [line(""), center("H A M M E R S P A C E   P S   W A R D E N"), line(""), center("W.A.R.D.E.N."),
+              center("Wide-spectrum Access Rights"), center("& Directory Enforcement Navigator"),
+              line(""), center("v" + TOOLKIT_VERSION), line(""), stars]
+    else:
+        L += ["{}  v{}".format(DISPLAY_NAME, TOOLKIT_VERSION),
+              "Wide-spectrum Access Rights & Directory Enforcement Navigator",
+              "Copyright (C) 2016-{} Hammerspace, Inc.".format(year)]
+    out(C.Y + "\n".join(L) + C.X)
+    out("")
+
+
+def status_lines():
     nt = {"dsx": "Hammerspace DSX", "anvil": "Hammerspace Anvil (Salt master)"}.get(S.ctx.node_type, "")
-    out("  Host:       {}{}{}".format(HOST, "  [{}]".format(nt) if nt else "",
-                                      "  [tmux]" if os.environ.get("TMUX") else ""))
-    out("  Tool:       {}".format(S.be.label + "  on " + S.ex.describe() if S.be else "(not chosen)"))
+    dim("  Host: {}{}{}   Log folder: {}".format(HOST, "  [{}]".format(nt) if nt else "",
+                                                 "  [tmux]" if os.environ.get("TMUX") else "", S.log.base))
+    out("  Tool:     {}".format(S.be.label + "  on " + S.ex.describe() if S.be else "(not chosen: option 1)"))
     t = ", ".join(S.targets[:3]) + (" +{} more".format(len(S.targets) - 3) if len(S.targets) > 3 else "")
-    out("  Targets:    {}{}".format(t or "(none)", "   [recursive]" if S.recursive and S.targets else ""))
-    out("  Log folder: {}".format(S.log.base))
+    out("  Targets:  {}{}".format(t or "(none: option 2)", "   [recursive]" if S.recursive and S.targets else ""))
 
 
-MENU = [("1", "Choose permission tool"),
-        ("2", "Choose target path(s) / recursive"),
-        ("3", "View permissions"),
-        ("4", "Grant or change access"),
-        ("5", "Remove access"),
-        ("6", "Edit the full ACL (native text)"),
-        ("7", "Compare permissions: source vs destination (migration check)"),
-        ("8", "Change log"),
-        ("9", "Undo a change"),
-        ("q", "Quit")]
+TOOL_TITLES = {"3": "View Permissions", "4": "Grant or Change Access", "5": "Remove Access",
+               "6": "Edit the Full ACL", "7": "Compare: Source vs Destination", "8": "Change Log",
+               "9": "Undo a Change"}
 
 
 def main_menu():
     actions = {"1": lambda: setattr_pair(select_backend()), "2": select_targets, "3": do_view, "4": do_grant,
                "5": do_remove, "6": do_edit, "7": do_compare, "8": do_log, "9": do_undo}
+    first = True
     while True:
-        banner()
+        clear()
+        if first:
+            banner()
+            first = False
+        else:
+            out("{}{}".format(C.B, C.CY))
+            out("  ╔════════════════════════════════════════════════════╗")
+            out("  ║         Hammerspace PS Warden  {:<9}           ║".format("v" + TOOLKIT_VERSION))
+            out("  ╚════════════════════════════════════════════════════╝")
+            out(C.X)
+        status_lines()
+        out("")
+        out("  {}Setup{}".format(C.B, C.X))
+        out("    1) Choose permission tool       (nfs4, icacls, chmod, Hammerspace richacl)")
+        out("    2) Choose target path(s)        (and recursive)")
+        out("  {}Permissions{}".format(C.B, C.X))
+        out("    3) View permissions")
+        out("    4) Grant or change access       (preview, apply, log)")
+        out("    5) Remove access")
+        out("    6) Edit the full ACL            (native text, SDDL or mode)")
+        out("  {}Data migration{}".format(C.B, C.X))
+        out("    7) Compare permissions          (source vs destination: did the migration change them?)")
+        out("  {}History{}".format(C.B, C.X))
+        out("    8) Change log")
+        out("    9) Undo a change")
+        out("")
+        out("    q) Quit")
+        out("")
         try:
-            c = choose("Menu", MENU, allow_back=False)
+            c = read_line("  Select [1-9, q]: ").strip().lower()
         except Back:
-            c = "q"
-        if c == "q":
-            return
+            out("")
+            return 0
+        except KeyboardInterrupt:
+            out("")
+            return 130
+        if c in ("q", "quit", "exit", "0"):
+            out("")
+            return 0
+        if c not in actions:
+            err("Invalid selection.")
+            time.sleep(1)
+            continue
+        if c in TOOL_TITLES:
+            box(TOOL_TITLES[c])
         try:
             actions[c]()
         except Back:
@@ -2560,37 +2718,77 @@ def setattr_pair(pair):
         info("Tool changed; check the target paths still make sense (menu 2).")
 
 
-def main():
-    ap = argparse.ArgumentParser(prog=PROG, description=TITLE)
+def usage():
+    out("""{name} v{v}
+{title}
+
+Usage: sudo python3 {s} [OPTIONS]
+
+  (none)                Interactive menu
+  --log-dir DIR         Logs, snapshots, saved plans and compare reports
+                        (default ~/.hs-warden, or $HS_WARDEN_HOME)
+  --max-items N         Most objects read in one go, per side in Compare
+                        (default {mi})
+  -h, --help            Show this help
+  -v, --version         Show version
+
+Backends: nfs4_getfacl/nfs4_setfacl, Windows icacls, chmod, and Hammerspace
+getrichacl/setrichacl. The Hammerspace tools run only on a DSX: locally on a
+DSX, or from the active Anvil (Salt master) through salt. On any Hammerspace
+node WARDEN runs inside tmux and relaunches itself in one if needed.
+
+Requires Python 3.6 or newer (python3 on Hammerspace nodes).""".format(
+        name=DISPLAY_NAME, v=TOOLKIT_VERSION, title=TITLE, s=os.path.basename(SELF_PATH), mi=DEFAULT_MAX_ITEMS))
+
+
+def main(argv=None):
+    if sys.version_info < (3, 6):
+        sys.stderr.write("{} needs Python 3.6 or newer.\n".format(DISPLAY_NAME))
+        return 1
+    argv = sys.argv[1:] if argv is None else argv
+    ap = argparse.ArgumentParser(prog=PROG, add_help=False)
     ap.add_argument("--log-dir", default=os.environ.get("HS_WARDEN_HOME") or os.path.join(os.path.expanduser("~"), ".hs-warden"))
     ap.add_argument("--max-items", type=int, default=DEFAULT_MAX_ITEMS)
-    ap.add_argument("--version", action="store_true")
-    ap.add_argument("--agent", action="store_true", help=argparse.SUPPRESS)
-    ap.add_argument("--job-file", help=argparse.SUPPRESS)
-    ap.add_argument("--result-file", help=argparse.SUPPRESS)
-    args = ap.parse_args()
+    ap.add_argument("-v", "--version", action="store_true")
+    ap.add_argument("-h", "--help", action="store_true")
+    ap.add_argument("--agent", action="store_true")
+    ap.add_argument("--job-file")
+    ap.add_argument("--result-file")
+    args, unknown = ap.parse_known_args(argv)
+    if unknown:
+        err("Unknown option: " + " ".join(unknown))
+        usage()
+        return 1
+    if args.help:
+        usage()
+        return 0
     if args.version:
-        print("{} {}".format(PROG, VERSION))
+        out(TOOLKIT_VERSION)
         return 0
     if args.agent:
         return agent_main(args)
     _init_colors()
     S.ctx = Ctx()
     S.ctx.node_type = detect_node_type()
-    ensure_tmux(S.ctx, sys.argv[1:])
+    ensure_tmux(S.ctx, argv)
     S.log = Log(os.path.abspath(os.path.expanduser(args.log_dir)))
     S.max_items = args.max_items
+    rc = 0
     try:
-        main_menu()
+        rc = main_menu() or 0
     except KeyboardInterrupt:
         out("")
+        rc = 130
     if os.environ.get("HS_WARDEN_TMUX"):
         try:
-            input("\n  {} finished. Press Enter to close this tmux session.".format(PROG))
+            input("\n  {} finished. Press Enter to close this tmux session.".format(DISPLAY_NAME))
         except (EOFError, KeyboardInterrupt):
             pass
-    return 0
+    return rc
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
