@@ -6,7 +6,7 @@ File permission management, undo, and migration permission audit for Hammerspace
 | | |
 |---|---|
 | Version | 1.1.0 (2026-11-24) |
-| Repository | https://github.com/vjason1/hs-warden |
+| Download | hs-warden.py (attached to this page) |
 | Script | hs-warden.py (single file) |
 | Runs on | Hammerspace Anvil and DSX, Linux / macOS NFS clients, Windows |
 | Requires | Python 3.6+ (standard library only; Anvil and DSX ship 3.6.8) |
@@ -226,9 +226,16 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 
 ## More documentation
 
-- README and full reference: https://github.com/vjason1/hs-warden
-- Detailed pages in the repository under `docs/confluence/`: Overview and Quick Start; Hammerspace Permissions; Migration Permission Check; Preview, Change Log and Undo; Reference.
+Child pages:
+
+- hs-warden: Overview and Quick Start
+- hs-warden: Hammerspace Permissions (DSX, Anvil, salt and tmux)
+- hs-warden: Migration Permission Check (Compare)
+- hs-warden: Preview, Change Log and Undo
+- hs-warden: Reference
+
+`python3 hs-warden.py -h` prints the built-in help.
 
 ## Support and feedback
 
-Questions, problems or ideas: contact Hammerspace Solutions Engineering, or open an issue in the repository. Include the hs-warden version (`-v`), the change id, and the relevant lines from `changes.log`.
+Questions, problems or ideas: contact Hammerspace Solutions Engineering. Include the hs-warden version (`-v`), the change id, and the relevant lines from `changes.log`.
