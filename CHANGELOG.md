@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 — 2026-11-24
+- Fix: `getrichacl --quick` prints the ACL on one line with commas between entries; it was read as a single entry.
+  Entries are now split on commas (one-per-line output is still read), and ACLs are written back in the same form.
+- View: **e** explains every letter of each entry (rights, not granted, applies to, flags, ACL flags); **l** shows the
+  full legend for the tool; **n** the native text.
+
 ## 1.4.0 — 2026-11-24
 - tmux on the Anvil only. Each DSX job is one salt `cmd.run` call (job file and run in the same call; the result
   comes back in the salt output). Nothing runs in tmux on the DSX, and the DSX no longer needs tmux.

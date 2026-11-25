@@ -7,7 +7,7 @@
 # ==============================================================================
 # Project:         Hammerspace PS Warden (github.com/vjason1/hs-warden)
 # Script:          hs-warden.py
-# Version:         1.4.0
+# Version:         1.5.0
 # Updated:         2026-11-24
 # Authors:         Jason Ventresco, Hammerspace Solutions Engineering
 #                  (with Claude)
@@ -85,6 +85,13 @@
 #    DSX; write access to /var/tmp/hs-warden on the DSX.
 #
 #  CHANGELOG:
+#    1.5.0 (2026-11-24)  Fix: getrichacl --quick prints the ACL on one line with
+#                        commas between entries; it was read as a single entry.
+#                        Entries are now split on commas (one-per-line output is
+#                        still read), and ACLs are written back in the same form.
+#                        View: 'e' explains every letter of each entry (rights,
+#                        what it applies to, flags, ACL flags), 'l' shows the full
+#                        legend for the tool, 'n' the native text.
 #    1.4.0 (2026-11-24)  tmux on the Anvil only. DSX jobs run as one salt cmd.run
 #                        call each (no tmux, systemd scope or cmd.run_bg on the
 #                        DSX): the job file and the run go in the same call and
@@ -153,7 +160,7 @@ import sys
 import tempfile
 import time
 
-TOOLKIT_VERSION = "1.4.0"
+TOOLKIT_VERSION = "1.5.0"
 VERSION = TOOLKIT_VERSION
 PROG = "hs-warden"
 DISPLAY_NAME = "Hammerspace PS Warden"
@@ -655,13 +662,23 @@ class RichAcl(Backend):
     def set_display(self, path, raw):
         return "setrichacl --dacl --set-file - {} <<'EOF'\n{}\nEOF".format(q(path), norm_text(raw))
 
+    @staticmethod
+    def chunks(text):
+        """ACEs from getrichacl output: --quick prints them on one line separated
+        by commas (flags:..., then the ACEs); the aligned form prints one per line."""
+        for line in (text or "").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for c in line.split(","):
+                c = c.strip()
+                if c:
+                    yield c
+
     def parse(self, text, path=None):
         meta = {"flags": None}
         ents = []
-        for line in (text or "").splitlines():
-            l = line.strip()
-            if not l or l.startswith("#"):
-                continue
+        for l in self.chunks(text):
             if l.lower().startswith("flags:"):
                 meta["flags"] = l.split(":", 1)[1].strip()
                 continue
@@ -697,10 +714,12 @@ class RichAcl(Backend):
         return "{}:{}:{}:{}".format(who, self.norm_perms(e["perms"]), flags, e["type"])
 
     def serialize(self, meta, entries):
-        lines = []
+        """Same form as getrichacl --quick and the setrichacl help example:
+        flags:..,ace,ace on one line."""
+        parts = []
         if meta.get("flags") is not None:
-            lines.append("flags:" + meta["flags"])
-        return "\n".join(lines + [self.entry_native(e) for e in entries])
+            parts.append("flags:" + meta["flags"])
+        return ",".join(parts + [self.entry_native(e) for e in entries])
 
 
 # ---- chmod -------------------------------------------------------------------
@@ -1817,6 +1836,188 @@ def parse_item(be, item):
 
 
 # ==============================================================================
+#  LEGENDS: what each letter / token means (View -> e)
+# ==============================================================================
+RIGHTS_LEGEND = {
+    "richacl": [
+        ("r", "read_data / list_directory", "read a file's contents / list a folder"),
+        ("w", "write_data / add_file", "change a file's contents / create files in a folder"),
+        ("p", "append_data / add_subdirectory", "append to a file / create sub-folders"),
+        ("x", "execute", "run a file / pass through (traverse) a folder"),
+        ("d", "delete_child", "delete files and folders inside this folder"),
+        ("D", "delete", "delete this file or folder itself"),
+        ("a", "read_attributes", "read basic attributes (size, timestamps)"),
+        ("A", "write_attributes", "change basic attributes (timestamps, etc.)"),
+        ("R", "read_named_attrs", "read named / extended attributes"),
+        ("W", "write_named_attrs", "write named / extended attributes"),
+        ("c", "read_acl", "read the permissions"),
+        ("C", "write_acl", "change the permissions"),
+        ("o", "write_owner", "change the owner"),
+        ("S", "synchronize", "wait on the file (Windows sync; normally given with any access)"),
+        ("e", "write_retention", "change retention settings"),
+        ("E", "write_retention_hold", "set or clear a retention hold"),
+    ],
+    "nfs4": [
+        ("r", "read_data / list_directory", "read a file's contents / list a folder"),
+        ("w", "write_data / add_file", "change a file's contents / create files in a folder"),
+        ("a", "append_data / add_subdirectory", "append to a file / create sub-folders"),
+        ("x", "execute", "run a file / pass through (traverse) a folder"),
+        ("d", "delete", "delete this file or folder itself"),
+        ("D", "delete_child", "delete files and folders inside this folder"),
+        ("t", "read_attributes", "read basic attributes (size, timestamps)"),
+        ("T", "write_attributes", "change basic attributes (timestamps, etc.)"),
+        ("n", "read_named_attrs", "read named / extended attributes"),
+        ("N", "write_named_attrs", "write named / extended attributes"),
+        ("c", "read_acl", "read the permissions"),
+        ("C", "write_acl", "change the permissions"),
+        ("o", "write_owner", "change the owner"),
+        ("y", "synchronize", "wait on the file (normally given with any access)"),
+    ],
+    "chmod": [
+        ("r", "read", "read a file / list a folder"),
+        ("w", "write", "change a file / create, rename and delete entries in a folder"),
+        ("x", "execute", "run a file / pass through (traverse) a folder"),
+    ],
+    "icacls": [
+        ("F", "full access", "everything, including changing permissions and owner"),
+        ("M", "modify", "read, write, execute and delete"),
+        ("RX", "read and execute", "read and run / traverse"),
+        ("R", "read-only", "read data, attributes and permissions"),
+        ("W", "write-only", "write and append data and attributes"),
+        ("D", "delete", "delete this object"),
+        ("N", "no access", ""),
+        ("RD", "read data / list directory", ""), ("WD", "write data / add file", ""),
+        ("AD", "append data / add subdirectory", ""), ("X", "execute / traverse", ""),
+        ("DC", "delete child", "delete files and folders inside"), ("DE", "delete", ""),
+        ("RA", "read attributes", ""), ("WA", "write attributes", ""),
+        ("REA", "read extended attributes", ""), ("WEA", "write extended attributes", ""),
+        ("RC", "read control (read permissions)", ""), ("WDAC", "write DAC (change permissions)", ""),
+        ("WO", "write owner", ""), ("S", "synchronize", ""), ("AS", "access system security", ""),
+        ("MA", "maximum allowed", ""), ("GR", "generic read", ""), ("GW", "generic write", ""),
+        ("GE", "generic execute", ""), ("GA", "generic all", ""),
+    ],
+}
+
+FLAGS_LEGEND = {
+    "richacl": [
+        ("f", "file_inherit", "new files inside inherit this entry"),
+        ("d", "dir_inherit", "new sub-folders inherit this entry"),
+        ("n", "no_propagate", "inherited one level only, not further down"),
+        ("i", "inherit_only", "applies to the contents only, not to this folder"),
+        ("g", "identifier_group", "the name is a group"),
+        ("a", "inherited", "this entry was inherited from the parent folder"),
+        ("u", "unmapped", "the user / group ID has no name on this system"),
+    ],
+    "nfs4": [
+        ("f", "file_inherit", "new files inside inherit this entry"),
+        ("d", "directory_inherit", "new sub-folders inherit this entry"),
+        ("n", "no_propagate_inherit", "inherited one level only, not further down"),
+        ("i", "inherit_only", "applies to the contents only, not to this folder"),
+        ("g", "identifier_group", "the name is a group"),
+    ],
+    "icacls": [
+        ("OI", "object inherit", "files inside inherit this entry"),
+        ("CI", "container inherit", "sub-folders inherit this entry"),
+        ("NP", "no propagate", "inherited one level only"),
+        ("IO", "inherit only", "applies to the contents only, not to this folder"),
+        ("I", "inherited", "inherited from the parent folder"),
+    ],
+}
+
+ACL_FLAGS_LEGEND = [
+    ("a", "auto_inherit", "automatic inheritance is on for this ACL"),
+    ("p", "protected", "doesn't take entries from its parent"),
+    ("d", "defaulted", "automatic inheritance replaces the whole ACL"),
+    ("m", "masked", "the file mode bits limit what the ACL grants"),
+    ("w", "write_through", "with masked: the owner/other mode bits set the actual rights"),
+]
+
+
+def native_entry_text(be, e):
+    if be.key == "richacl":
+        return be.entry_native(e)
+    if be.key == "nfs4":
+        return be.entry_native(e)
+    if be.key == "icacls":
+        return be.entry_native(e)
+    return "{} {}".format(e["who"], be.show_perms(e["perms"]))
+
+
+def explain_entries(be, ents, meta, is_dir):
+    """Every entry of the target, letter by letter, then the flags it uses."""
+    legend = dict((k, (n, d)) for k, n, d in RIGHTS_LEGEND.get(be.key, []))
+    sub("What the letters mean ({})".format(be.short))
+    if be.key == "richacl":
+        dim("    Format: who:rights:flags:type   (rights and flags are separate fields; in rights 'd' is")
+        dim("    delete_child and 'D' is delete, in flags 'd' is dir_inherit)")
+    elif be.key == "nfs4":
+        dim("    Format: type:flags:who:rights   (type A allow, D deny, U audit, L alarm; note 'd' is delete")
+        dim("    and 'D' is delete_child here, the other way round from Hammerspace richacl)")
+    for i, e in enumerate(ents):
+        out("")
+        out("  {}{}) {}{}   {}".format(C.B, i + 1, native_entry_text(be, e), C.X,
+                                       be.access_text(e["perms"]) if be.level_name(e["perms"]) else ""))
+        toks = sorted(be.perm_set(e["perms"]), key=lambda t: list(legend).index(t) if t in legend else 99) \
+            if be.key == "icacls" else [c for c in be.letters if c in be.perm_set(e["perms"])]
+        if not toks:
+            out("        (no rights)")
+        for t in toks:
+            n, d = legend.get(t, ("unknown", ""))
+            out("        {:<5} {:<31} {}".format(t, n, d))
+        missing = [c for c, n, d in RIGHTS_LEGEND.get(be.key, []) if be.key != "icacls" and c not in toks]
+        if missing and be.key != "chmod":
+            dim("        not granted: " + " ".join(missing))
+        if be.key != "chmod":
+            what = applies_text(e["inherit"], is_dir) if is_dir else "This file"
+            out("        {:<5} {:<31} {}".format("", "applies to", what + ("   (inherited)" if e.get("inherited") else "")))
+    used = set()
+    for e in ents:
+        used |= set(e["inherit"]) | ({"g"} if e.get("group") else set()) | ({"a"} if e.get("inherited") else set()) \
+            | set(e.get("extra") or "")
+    fl = FLAGS_LEGEND.get(be.key, [])
+    if be.key == "icacls":
+        used = {"OI" if "f" in u else "CI" if "d" in u else "IO" if "i" in u else "NP" if "n" in u else u for u in used}
+        used |= {"I"} if any(e.get("inherited") for e in ents) else set()
+    shown = [x for x in fl if x[0] in used]
+    if shown:
+        sub("Entry flags used here")
+        for k, n, d in shown:
+            out("    {:<5} {:<22} {}".format(k, n, d))
+    if be.key == "richacl" and (meta or {}).get("flags"):
+        sub("ACL flags ('flags:{}')".format(meta["flags"]))
+        for k, n, d in ACL_FLAGS_LEGEND:
+            if k in meta["flags"]:
+                out("    {:<5} {:<22} {}".format(k, n, d))
+    if be.key == "chmod" and (meta or {}).get("special"):
+        sub("Special bits")
+        sp = meta["special"]
+        for b, n, d in ((0o4000, "setuid", "runs as the file's owner"), (0o2000, "setgid", "runs as the group / new files take the folder's group"),
+                        (0o1000, "sticky", "only owners can delete their own files in this folder")):
+            if sp & b:
+                out("    {:<8} {}".format(n, d))
+
+
+def show_legend(be):
+    """The full legend for a tool, independent of a target."""
+    sub("Rights ({})".format(be.short))
+    for k, n, d in RIGHTS_LEGEND.get(be.key, []):
+        out("    {:<5} {:<31} {}".format(k, n, d))
+    if be.levels:
+        sub("Standard levels")
+        for n in STANDARD_LEVELS:
+            if n in be.levels:
+                out("    {:<15} {}".format(n, be.show_perms(be.levels[n])))
+    if FLAGS_LEGEND.get(be.key):
+        sub("Entry flags")
+        for k, n, d in FLAGS_LEGEND[be.key]:
+            out("    {:<5} {:<22} {}".format(k, n, d))
+    if be.key == "richacl":
+        sub("ACL flags (flags:...)")
+        for k, n, d in ACL_FLAGS_LEGEND:
+            out("    {:<5} {:<22} {}".format(k, n, d))
+
+
+# ==============================================================================
 #  READ / VIEW
 # ==============================================================================
 def read_state(paths=None, recursive=None, be=None, ex=None, owner=False, display_all=False, max_depth=None):
@@ -1897,12 +2098,30 @@ def do_view():
         out("")
         for l in inherit_summary(S.be, meta, ents, it["is_dir"]):
             (dim if l.startswith("Existing contents") else out)("    " + l)
-    if tops and confirm("Show the native ({}) text as well?".format(S.be.short), False):
-        for it in tops:
-            sub("native: " + it["path"])
-            out(it.get("display") or it.get("raw"))
-            if S.be.key == "icacls":
-                dim("SDDL: " + it.get("raw", ""))
+    while tops:
+        out("")
+        out("    e) Explain what each letter means      n) Show the native ({}) text".format(S.be.short))
+        out("    l) Full legend for {:<20}Enter) Done".format(S.be.short))
+        try:
+            c = read_line("  Choice: ").strip().lower()
+        except Back:
+            return
+        if c in ("", "b", "q", "back"):
+            return
+        if c == "e":
+            for it in tops:
+                if len(tops) > 1:
+                    sub(show_path(S.ex, it["path"]))
+                meta, ents = parse_item(S.be, it)
+                explain_entries(S.be, ents, meta, it["is_dir"])
+        elif c == "n":
+            for it in tops:
+                sub("native: " + it["path"])
+                out(it.get("display") or it.get("raw"))
+                if S.be.key == "icacls":
+                    dim("SDDL: " + it.get("raw", ""))
+        elif c == "l":
+            show_legend(S.be)
 
 
 # ==============================================================================

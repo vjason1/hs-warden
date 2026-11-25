@@ -1,11 +1,11 @@
-# Hammerspace PS Warden (hs-warden) v1.4.0
+# Hammerspace PS Warden (hs-warden) v1.5.0
 
 **W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
 File permission management, undo, and migration permission audit for Hammerspace engagements.
 
 | | |
 |---|---|
-| Version | 1.4.0 (2026-11-24) |
+| Version | 1.5.0 (2026-11-24) |
 | Download | hs-warden.py (attached to this page) |
 | Script | hs-warden.py (single file) |
 | Runs on | Hammerspace Anvil and DSX, Linux / macOS NFS clients, Windows |
@@ -31,7 +31,7 @@ File permission management, undo, and migration permission audit for Hammerspace
 *                                 \_____________/                                 *
 *                    H A M M E R S P A C E   P S   W A R D E N                    *
 *                                   W.A.R.D.E.N.                                  *
-*                                      v1.4.0                                     *
+*                                      v1.5.0                                     *
 ***********************************************************************************
 ```
 
@@ -81,6 +81,8 @@ The main uses are:
 Access is shown as a standard level (Full Control, Modify, Read & Execute, Read, Write) with the native rights next to it. Hammerspace levels use the Windows-compatible labels from the getrichacl / setrichacl help.
 
 **Same actions for every tool.** View, Grant or change, Remove, Edit the full native ACL.
+
+**Letters explained.** In View, **e** spells out every letter of each entry (what the right allows, what's not granted, what the entry applies to, the flags); **l** shows the full legend.
 
 **Preview before every change.** Before and after tables marked `+` added, `~` changed, `-` removed; how many objects will change; the exact native commands. Apply, view every diff, save as a script for approval, or cancel.
 
@@ -140,7 +142,7 @@ python3 /home/serviceadmin/hs-warden.py
 
 4. **1** → Hammerspace richacl [via salt] → pick the DSX.
 5. **2** → pick the share from the list, then press Enter to use it, open sub-folders by number, or type a path inside it (e.g. `Lab/Smith`). Then choose whether to include everything below it.
-6. **3** to see the target's permissions and whether they're passed on to subfolders and files, **4** to grant, **5** to remove. Read the preview, then **a** to apply.
+6. **3** to see the target's permissions and whether they're passed on to subfolders and files (then **e** explains every letter), **4** to grant, **5** to remove. Read the preview, then **a** to apply.
 7. Made a mistake? **9** → pick the change → confirm.
 
 Type `b` at any prompt to go back. `python3 hs-warden.py -v` prints the version; `-h` prints help.
@@ -219,6 +221,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.5.0 | 2026-11-24 | Fix: getrichacl --quick output (one line, comma-separated) read as one entry. View: e explains every letter, l shows the full legend, n the native text. |
 | 1.4.0 | 2026-11-24 | tmux on the Anvil only: each DSX job is one salt cmd.run call; the DSX no longer needs tmux. |
 | 1.3.0 | 2026-11-24 | DSX jobs start their tmux server in a systemd scope (or salt cmd.run_bg) so it survives the salt call. View shows only the chosen target and whether its permissions are passed on (recursive). |
 | 1.2.2 | 2026-11-24 | DSX jobs use their own tmux server (`tmux -L hs-warden`); diagnostics from the DSX when a job fails. |

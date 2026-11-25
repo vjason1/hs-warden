@@ -16,6 +16,9 @@ The Hammerspace levels are the "Regular file ACL labels" from the getrichacl / s
 
 ## Rights mapping
 
+In View (menu 3), **e** explains each entry letter by letter and **l** shows the full legend for the chosen tool.
+
+
 Used by Compare across tools and to name levels.
 
 | Right | richacl | NFSv4 | icacls | chmod |

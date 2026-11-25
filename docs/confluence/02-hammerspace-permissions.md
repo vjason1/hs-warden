@@ -111,6 +111,32 @@ You can also enter custom letters:
 | a | read_attributes | e | write_retention |
 | A | write_attributes | E | write_retention_hold |
 
+## What the letters mean
+
+In **3 – View permissions**, after the table:
+
+| Key | Shows |
+|---|---|
+| e | Every entry of the target, letter by letter: the right's name and what it allows, the rights not granted, what the entry applies to, and the flags it uses |
+| l | The full legend for the tool: all rights, the standard levels, entry flags and ACL flags |
+| n | The native text, exactly as getrichacl prints it |
+
+Example for `everyone@:rxdaRc:fd:allow`:
+
+```
+  2) everyone@:rxdaRc:fd:allow
+        r     read_data / list_directory      read a file's contents / list a folder
+        x     execute                         run a file / pass through (traverse) a folder
+        d     delete_child                    delete files and folders inside this folder
+        a     read_attributes                 read basic attributes (size, timestamps)
+        R     read_named_attrs                read named / extended attributes
+        c     read_acl                        read the permissions
+        not granted: w p D A W C o S e E
+              applies to                      This folder, subfolders and files
+```
+
+> **Note:** in the rights field `d` is delete_child and `D` is delete; in the flags field `d` is dir_inherit. NFSv4 swaps `d` and `D` in rights.
+
 ## Inheritance and ACL flags
 
 The "Applies to" choices map to richacl ACE flags:
@@ -136,14 +162,11 @@ hs-warden reads the ACL with `getrichacl --quick --dacl <path>`, makes your chan
 
 ```
 setrichacl --dacl --set-file - /mnt/smb-data-portal/projects/Lab <<'EOF'
-flags:a
-alice@ad.local:rwpxDaARWcS:fdg:allow
-owner@:rwpxDaARWcCoS:a:allow
-group@:rwpxDaARWcS:a:allow
-group:domain users@ad.local:rxaRcS:fda:allow
-everyone@:raRcS:a:allow
+flags:a,alice@ad.local:rwpxDaARWcS:fdg:allow,owner@:rwpxDaARWcCoS:a:allow,group@:rwpxDaARWcS:a:allow,everyone@:raRcS:a:allow
 EOF
 ```
+
+The ACL is written in the same one-line, comma-separated form that `getrichacl --quick` prints (and that the setrichacl help uses: `flags:ap,everyone@:FullControl::allow`).
 
 Just before writing, it reads the ACL again. If it changed since the preview, that object is skipped and reported.
 

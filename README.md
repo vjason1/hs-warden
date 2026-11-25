@@ -84,7 +84,7 @@ The first screen shows the Hammerspace logo banner with the version; later scree
 
 | Option | What it does |
 |---|---|
-| 3 View | Standard table for each target (only the target, never the tree below), then whether its permissions are passed on: recursive / partly / not, how many entries go to subfolders and files, inherit-only and one-level entries, explicit vs inherited, and for richacl automatic inheritance and protected. Optional native text. |
+| 3 View | Standard table for each target (only the target, never the tree below), then whether its permissions are passed on: recursive / partly / not, how many entries go to subfolders and files, inherit-only and one-level entries, explicit vs inherited, and for richacl automatic inheritance and protected. Then **e** explains every letter of each entry (rights, not granted, applies to, flags), **l** shows the full legend for the tool, **n** the native text. |
 | 4 Grant | Who → allow/deny → access level → applies to (inheritance) → replace or add. |
 | 5 Remove | Pick entry numbers from the table; the same principal/type is removed from every object in scope. |
 | 6 Edit | Opens the native ACL in `$EDITOR` (NFSv4 text, richacl text, SDDL for icacls, octal or symbolic mode for chmod). |
