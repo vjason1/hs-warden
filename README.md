@@ -104,7 +104,7 @@ The first screen shows the Hammerspace logo banner with the version; later scree
 
 **tmux.** On any Hammerspace node (Anvil or DSX), WARDEN relaunches itself inside a tmux session named `hs-warden` if it was started outside tmux. If that session already exists you can attach to it or start a new one. Detach with `Ctrl-b d`; reattach with `tmux attach -t hs-warden`. If tmux isn't installed, the Hammerspace option is turned off.
 
-From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on the DSX. If you press Ctrl-C while waiting, WARDEN asks whether to keep waiting; the job keeps running on the DSX either way. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
+From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on the DSX, on WARDEN's own tmux server (`tmux -L hs-warden ls` lists them; `tmux -L hs-warden attach -t warden-<job id>` attaches), so other tmux sessions or a `~/.tmux.conf` there don't affect it. If you press Ctrl-C while waiting, WARDEN asks whether to keep waiting; the job keeps running on the DSX either way. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
 
 **Choosing targets.** With the Hammerspace tool, menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX (hidden folders such as `.snapshot` left out). Pick one, then:
 
