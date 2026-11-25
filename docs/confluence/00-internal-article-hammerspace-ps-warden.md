@@ -1,11 +1,11 @@
-# Hammerspace PS Warden (hs-warden) v1.1.0
+# Hammerspace PS Warden (hs-warden) v1.2.0
 
 **W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
 File permission management, undo, and migration permission audit for Hammerspace engagements.
 
 | | |
 |---|---|
-| Version | 1.1.0 (2026-11-24) |
+| Version | 1.2.0 (2026-11-24) |
 | Download | hs-warden.py (attached to this page) |
 | Script | hs-warden.py (single file) |
 | Runs on | Hammerspace Anvil and DSX, Linux / macOS NFS clients, Windows |
@@ -31,7 +31,7 @@ File permission management, undo, and migration permission audit for Hammerspace
 *                                 \_____________/                                 *
 *                    H A M M E R S P A C E   P S   W A R D E N                    *
 *                                   W.A.R.D.E.N.                                  *
-*                                      v1.1.0                                     *
+*                                      v1.2.0                                     *
 ***********************************************************************************
 ```
 
@@ -101,7 +101,7 @@ Access is shown as a standard level (Full Control, Modify, Read & Execute, Read,
 | getrichacl / setrichacl only on a DSX | On a DSX it runs them locally. On the active Anvil you pick a DSX from salt (`pd-node-type` grain `dsx`) and it runs them there. Anywhere else the option is unavailable. |
 | Always in tmux | On any Anvil or DSX, hs-warden relaunches itself in tmux session `hs-warden`. From the Anvil, each DSX job runs in its own detached tmux session on the DSX (`warden-<id>`). |
 | Survive dropped sessions | Reattach with `tmux attach -t hs-warden`. DSX jobs keep running if salt or SSH drops; hs-warden collects the result. |
-| Anvil vs DSX paths | Type `/hs/<share>/...` or `/mnt/smb-data-portal/<share>/...`; hs-warden converts and shows the DSX path. |
+| Picking targets | Menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX; pick one, then browse or type a path deeper inside it. Paths are shown with their Anvil (`/hs/...`) equivalent. |
 | Same code on both ends | The Anvil copies itself to `/var/tmp/hs-warden/` on the DSX with salt-cp and checks it by SHA-256 each session. |
 | Audit on the DSX | Each change made on a DSX is also logged in `/var/tmp/hs-warden/agent.log` there. |
 
@@ -139,7 +139,7 @@ python3 /home/serviceadmin/hs-warden.py
 ```
 
 4. **1** → Hammerspace richacl [via salt] → pick the DSX.
-5. **2** → enter `/hs/<share>/<folder>`, then choose whether to include everything below it.
+5. **2** → pick the share from the list, then press Enter to use it, open sub-folders by number, or type a path inside it (e.g. `Lab/Smith`). Then choose whether to include everything below it.
 6. **3** to look, **4** to grant, **5** to remove. Read the preview, then **a** to apply.
 7. Made a mistake? **9** → pick the change → confirm.
 
@@ -219,6 +219,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.2.0 | 2026-11-24 | Hammerspace targets: shares in /mnt/smb-data-portal are listed to pick from, with a folder browser or a typed path deeper inside the share (menu 2 and Compare). |
 | 1.1.0 | 2026-11-24 | Hammerspace PS look and versioning as in hs-cerberus: logo banner, title boxes, `[INFO] [OK] [WARN] [ERR]`, grouped menu, `-v` / `-h`, Python version check, UTF-8 output under salt/tmux. Version recorded in every log, snapshot, plan, report and DSX log line. |
 | 1.0.0 | 2026-11-24 | First release: four backends, standard table, grant / remove / edit with preview, change log, snapshots, undo, migration compare. |
 

@@ -7,7 +7,7 @@
 # ==============================================================================
 # Project:         Hammerspace PS Warden (github.com/vjason1/hs-warden)
 # Script:          hs-warden.py
-# Version:         1.1.0
+# Version:         1.2.0
 # Updated:         2026-11-24
 # Authors:         Jason Ventresco, Hammerspace Solutions Engineering
 #                  (with Claude)
@@ -84,6 +84,12 @@
 #    DSX; write access to /var/tmp/hs-warden on the DSX.
 #
 #  CHANGELOG:
+#    1.2.0 (2026-11-24)  Hammerspace targets (menu 2, and Compare): the shares in
+#                        /mnt/smb-data-portal on the DSX are listed to pick from,
+#                        then a folder browser (number = open, .. = up, Enter =
+#                        use it) or a typed path deeper inside the share. Paths
+#                        are shown with their Anvil (/hs/...) equivalent. Menu 2
+#                        says the tool must be chosen first when it isn't.
 #    1.1.0 (2026-11-24)  Hammerspace PS look and versioning, as in hs-cerberus:
 #                        launch banner with the Hammerspace logo, title boxes,
 #                        [INFO]/[OK]/[WARN]/[ERR] tags, grouped main menu,
@@ -121,7 +127,7 @@ import sys
 import tempfile
 import time
 
-TOOLKIT_VERSION = "1.1.0"
+TOOLKIT_VERSION = "1.2.0"
 VERSION = TOOLKIT_VERSION
 PROG = "hs-warden"
 DISPLAY_NAME = "Hammerspace PS Warden"
@@ -1248,6 +1254,22 @@ class LocalExec(object):
     def to_target(self, p):
         return os.path.abspath(os.path.expanduser(p))
 
+    def list_dirs(self, path):
+        """Sorted sub-folder names (no hidden ones), or None if path isn't a folder."""
+        if not os.path.isdir(path):
+            return None
+        try:
+            names = os.listdir(path)
+        except OSError:
+            return None
+        return sorted((n for n in names if not n.startswith(".") and os.path.isdir(os.path.join(path, n))
+                       and not os.path.islink(os.path.join(path, n))), key=natural_key)
+
+    def path_type(self, path):
+        if os.path.isdir(path):
+            return "dir"
+        return "file" if os.path.lexists(path) else None
+
 
 class SaltExec(object):
     """Runs jobs on a DSX: salt starts the agent in a detached tmux session
@@ -1263,6 +1285,20 @@ class SaltExec(object):
 
     def to_target(self, p):
         return anvil_to_dsx(p)
+
+    def list_dirs(self, path):
+        """Sub-folders of a DSX path (a plain listing through salt; no ACL tools)."""
+        o = self._cmd("if [ -d {p} ]; then find {p} -mindepth 1 -maxdepth 1 -type d -printf '%f\\n' 2>/dev/null; "
+                      "echo WARDEN_OK; else echo WARDEN_NODIR; fi".format(p=q(path)), timeout=60)
+        if "WARDEN_OK" not in o:
+            return None
+        names = [l for l in o.splitlines() if l and l != "WARDEN_OK" and not l.startswith(".")]
+        return sorted(names, key=natural_key)
+
+    def path_type(self, path):
+        o = self._cmd("if [ -d {p} ]; then echo WARDEN_DIR; elif [ -e {p} ]; then echo WARDEN_FILE; "
+                      "else echo WARDEN_NONE; fi".format(p=q(path)), timeout=60)
+        return "dir" if "WARDEN_DIR" in o else "file" if "WARDEN_FILE" in o else None
 
     def _cmd(self, command, timeout=60):
         r = salt_cmd([self.node], command, timeout=timeout)
@@ -1570,21 +1606,117 @@ def need_targets():
         raise Abort("No target path set.")
 
 
+def dsx_to_anvil(p):
+    if p == PORTAL or p.startswith(PORTAL + "/"):
+        return ANVIL_SHARES + p[len(PORTAL):]
+    return p
+
+
+def show_path(ex, p):
+    """DSX path, plus the Anvil view when working through salt."""
+    if isinstance(ex, SaltExec) and p.startswith(PORTAL):
+        return "{}   (Anvil: {})".format(p, dsx_to_anvil(p))
+    return p
+
+
+def type_path(ex, label):
+    if isinstance(ex, SaltExec):
+        dim("  Give /hs/<share>/... (Anvil view) or {}/<share>/... (DSX view).".format(PORTAL))
+    p = ask(label).strip().strip("'\"")
+    t = ex.to_target(p)
+    if t != p:
+        dim("    -> {} on {}".format(t, ex.describe()))
+    kind = ex.path_type(t)
+    if kind is None:
+        raise Abort("{} doesn't exist on {}.".format(t, ex.describe()))
+    return t
+
+
+BROWSE_SHOW = 60
+
+
+def pick_share_path(ex, label="Target"):
+    """Hammerspace: list the shares under /mnt/smb-data-portal on the DSX, pick
+    one, then optionally browse or type a path deeper inside it."""
+    info("Listing shares in {} on {}...".format(PORTAL, ex.describe()))
+    shares = ex.list_dirs(PORTAL)
+    if not shares:
+        warn("No shares found in {} on {}.".format(PORTAL, ex.describe()))
+        return type_path(ex, "{} path".format(label))
+    opts = [(str(i + 1), "{:<40} {}(Anvil: {}/{}){}".format(n, C.D, ANVIL_SHARES, n, C.X)) for i, n in enumerate(shares)]
+    opts.append(("p", "Type a full path instead"))
+    c = choose("{}: which share? ({} on {})".format(label, PORTAL, getattr(ex, "node", HOST)), opts)
+    if c == "p":
+        return type_path(ex, "{} path".format(label))
+    root = PORTAL + "/" + shares[int(c) - 1]
+    cur = root
+    while True:
+        subs = ex.list_dirs(cur)
+        if subs is None:
+            err("{} is not readable as a folder.".format(cur))
+            subs = []
+        out("")
+        out("  {}Folder:{} {}".format(C.B, C.X, show_path(ex, cur)))
+        if subs:
+            for i, n in enumerate(subs[:BROWSE_SHOW]):
+                out("    {:>3}) {}/".format(i + 1, n))
+            if len(subs) > BROWSE_SHOW:
+                dim("    ... {} more (type the name to open one)".format(len(subs) - BROWSE_SHOW))
+        else:
+            dim("    (no sub-folders)")
+        dim("  Enter = use this folder   number = open that folder   .. = up   "
+            "or type a path inside it (e.g. Lab/Smith or Lab/Smith/file.txt)")
+        a = ask("Use", required=False).strip().strip("'\"")
+        if not a:
+            return cur
+        if a == "..":
+            if cur != root:
+                cur = os.path.dirname(cur)
+            continue
+        if a.isdigit():
+            i = int(a)
+            if 1 <= i <= len(subs):
+                cur = cur + "/" + subs[i - 1]
+            else:
+                err("No folder number {}.".format(i))
+            continue
+        cand = a if a.startswith("/") else cur + "/" + a.strip("/")
+        cand = ex.to_target(cand) if isinstance(ex, SaltExec) else os.path.normpath(cand)
+        if not cand.startswith(root):
+            warn("{} is outside share {}.".format(cand, os.path.basename(root)))
+        kind = ex.path_type(cand)
+        if kind == "dir":
+            cur = cand.rstrip("/")
+        elif kind == "file":
+            ok("File: " + show_path(ex, cand))
+            return cand
+        else:
+            err("{} doesn't exist.".format(cand))
+
+
 def select_targets():
+    if not S.be:
+        info("Choose the permission tool first; the target list depends on it.")
     need_backend()
     sub("Target paths")
-    if isinstance(S.ex, SaltExec):
-        dim("  Give /hs/<share>/... (Anvil view) or {}/<share>/... (DSX view).".format(PORTAL))
-    dim("  One path per line; empty line when done.")
     paths = []
-    while True:
-        p = ask("Path {}".format(len(paths) + 1), required=not paths)
-        if not p:
-            break
-        t = S.ex.to_target(p.strip().strip("'\""))
-        if t != p.strip():
-            dim("    -> {} on {}".format(t, S.ex.describe()))
-        paths.append(t)
+    if S.be.key == "richacl":
+        while True:
+            t = pick_share_path(S.ex, "Target {}".format(len(paths) + 1))
+            ok("Target {}: {}".format(len(paths) + 1, show_path(S.ex, t)))
+            paths.append(t)
+            if not confirm("Add another target?", False):
+                break
+    else:
+        dim("  One path per line; empty line when done.")
+        while True:
+            p = ask("Path {}".format(len(paths) + 1), required=not paths)
+            if not p:
+                break
+            t = S.ex.to_target(p.strip().strip("'\""))
+            if t != p.strip():
+                dim("    -> {} on {}".format(t, S.ex.describe()))
+            paths.append(t)
     S.targets = paths
     S.recursive = confirm("Include everything below directories (recursive)?", S.recursive)
 
@@ -2420,9 +2552,10 @@ def compare_one(ca, cb, opts):
 def compare_side(label, default_key=None):
     sub(label)
     be, ex = select_backend("{}: which tool reads it?".format(label), default_key)
-    if isinstance(ex, SaltExec):
-        dim("  Give /hs/<share>/... (Anvil view) or {}/<share>/... (DSX view).".format(PORTAL))
-    root = ex.to_target(ask("{} root path".format(label)).strip().strip("'\""))
+    if be.key == "richacl":
+        root = pick_share_path(ex, label.split(" (")[0])
+    else:
+        root = ex.to_target(ask("{} root path".format(label)).strip().strip("'\""))
     return be, ex, root
 
 
@@ -2638,7 +2771,8 @@ def status_lines():
     dim("  Host: {}{}{}   Log folder: {}".format(HOST, "  [{}]".format(nt) if nt else "",
                                                  "  [tmux]" if os.environ.get("TMUX") else "", S.log.base))
     out("  Tool:     {}".format(S.be.label + "  on " + S.ex.describe() if S.be else "(not chosen: option 1)"))
-    t = ", ".join(S.targets[:3]) + (" +{} more".format(len(S.targets) - 3) if len(S.targets) > 3 else "")
+    t = ", ".join(show_path(S.ex, x) for x in S.targets[:3]) + (
+        " +{} more".format(len(S.targets) - 3) if len(S.targets) > 3 else "")
     out("  Targets:  {}{}".format(t or "(none: option 2)", "   [recursive]" if S.recursive and S.targets else ""))
 
 

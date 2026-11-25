@@ -19,7 +19,7 @@ python3 /home/serviceadmin/hs-warden.py
 
 - hs-warden detects the DSX and restarts itself in a tmux session named `hs-warden`.
 - Choose **1 – Choose permission tool → Hammerspace richacl [this DSX]**.
-- Paths are DSX paths: `/mnt/smb-data-portal/<share>/...`
+- Menu 2 lists the shares in `/mnt/smb-data-portal` to pick from.
 
 ### Option B: on the active Anvil (recommended for most work)
 
@@ -33,18 +33,42 @@ python3 /home/serviceadmin/hs-warden.py
 - Pick the DSX that will run the commands (listed from salt; picked for you if there is only one).
 - hs-warden checks the DSX has `tmux`, `python3`, `getrichacl` and `setrichacl`, then copies itself to `/var/tmp/hs-warden/hs-warden.py` on the DSX with `salt-cp`. It only copies again when the Anvil's copy changes.
 
-## Paths
+## Choosing the target (menu 2)
+
+With the Hammerspace tool, menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX. Pick a share, then browse into it or type a path deeper inside it:
+
+```
+  Target 1: which share? (/mnt/smb-data-portal on dsx1)
+      1) archive                                  (Anvil: /hs/archive)
+      2) home                                     (Anvil: /hs/home)
+      3) projects                                 (Anvil: /hs/projects)
+      p) Type a full path instead
+  Choice: 3
+
+  Folder: /mnt/smb-data-portal/projects   (Anvil: /hs/projects)
+      1) Eng/
+      2) Lab/
+  Enter = use this folder   number = open that folder   .. = up   or type a path inside it
+  Use: Lab/Smith
+```
+
+| Type | To |
+|---|---|
+| Enter | Use the folder shown |
+| a number | Open that sub-folder |
+| .. | Go up one level (not above the share) |
+| a path inside the share | Go straight there, e.g. `Lab/Smith`; a file such as `Lab/Smith/data.csv` is used as the target directly |
+| p (at the share list) | Type a full path instead |
+
+Up to 60 sub-folders are listed; type a name to open one beyond that. Hidden folders such as `.snapshot` are left out. You can add more targets, then choose whether to include everything below them (recursive). Compare (menu 7) uses the same picker.
 
 | On the Anvil | On a DSX |
 |---|---|
 | /hs/projects/Lab | /mnt/smb-data-portal/projects/Lab |
 
-When working through salt you can type either form. hs-warden shows the DSX path it will use:
+hs-warden works with the DSX path and shows the Anvil path next to it. A typed full path can use either form.
 
-```
-  Path 1: /hs/projects/Lab
-    -> /mnt/smb-data-portal/projects/Lab on DSX dsx1 (salt from anvil1, tmux on the DSX)
-```
+> **Note:** listing shares and folders is a plain directory listing through salt. getrichacl / setrichacl only ever run in tmux on the DSX.
 
 ## What happens on the DSX when you work from the Anvil
 

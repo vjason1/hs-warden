@@ -1,6 +1,6 @@
 # hs-warden: Overview and Quick Start
 
-**W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator** (current version: 1.1.0; run `python3 hs-warden.py -v`)
+**W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator** (current version: 1.2.0; run `python3 hs-warden.py -v`)
 
 ## What it is
 
@@ -53,7 +53,7 @@ On an Anvil or DSX, hs-warden restarts itself inside a tmux session named `hs-wa
 
 ```
   1) Choose permission tool
-  2) Choose target path(s) / recursive
+  2) Choose target path(s)        (and recursive)
   3) View permissions
   4) Grant or change access
   5) Remove access
@@ -69,7 +69,7 @@ Type `b` at any prompt to go back one step.
 ## Your first change, step by step
 
 1. **1 – Choose permission tool.** Tools that don't work on this host are greyed out with the reason.
-2. **2 – Choose target path(s).** Enter one or more paths, then an empty line. Answer whether to include everything below directories (recursive).
+2. **2 – Choose target path(s).** For Hammerspace, pick a share from the list, then press Enter to use it, open sub-folders by number, or type a path inside it. For the other tools, enter one or more paths, then an empty line. Answer whether to include everything below directories (recursive).
 3. **3 – View permissions** to see the current table.
 4. **4 – Grant or change access**, then answer:
    - Who: owner@, group@, everyone@, a named user or a named group

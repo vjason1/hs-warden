@@ -53,7 +53,7 @@ py hs-warden.py
 ```
 
 1. **1 – Choose permission tool.** Only tools that work on this host are selectable; the others show why not.
-2. **2 – Choose target path(s).** One or more paths, then whether to include everything below directories (recursive).
+2. **2 – Choose target path(s).** For Hammerspace, pick a share from the list and browse or type a path inside it; for the other tools, type one or more paths. Then choose whether to include everything below directories (recursive).
 3. **3 – View**, **4 – Grant**, **5 – Remove** or **6 – Edit**.
 4. Review the preview, then **a** (apply), **v** (view every native diff), **s** (save as a script without applying) or **c** (cancel).
 5. Made a mistake? **9 – Undo a change**.
@@ -106,7 +106,31 @@ The first screen shows the Hammerspace logo banner with the version; later scree
 
 From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on the DSX. If you press Ctrl-C while waiting, WARDEN asks whether to keep waiting; the job keeps running on the DSX either way. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
 
-**Paths.** On the Anvil a share is `/hs/<share>/...`; on a DSX the same share is `/mnt/smb-data-portal/<share>/...`. When working through salt you can type either; WARDEN shows the DSX path it will use.
+**Choosing targets.** With the Hammerspace tool, menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX (hidden folders such as `.snapshot` left out). Pick one, then:
+
+- press **Enter** to use the folder shown,
+- type a **number** to open a sub-folder (up to 60 are listed; type a name to open one beyond that),
+- type **..** to go up,
+- or type a **path inside the share** (`Lab/Smith`, or a file such as `Lab/Smith/data.csv`).
+
+**p** types a full path instead. You can add more targets. Compare uses the same picker for a Hammerspace source or destination.
+
+```
+  Target 1: which share? (/mnt/smb-data-portal on dsx1)
+      1) archive                                  (Anvil: /hs/archive)
+      2) home                                     (Anvil: /hs/home)
+      3) projects                                 (Anvil: /hs/projects)
+      p) Type a full path instead
+  Choice: 3
+
+  Folder: /mnt/smb-data-portal/projects   (Anvil: /hs/projects)
+      1) Eng/
+      2) Lab/
+  Enter = use this folder   number = open that folder   .. = up   or type a path inside it
+  Use: Lab/Smith
+```
+
+**Paths.** On the Anvil a share is `/hs/<share>/...`; on a DSX the same share is `/mnt/smb-data-portal/<share>/...`. WARDEN works with the DSX path and shows the Anvil one next to it. A typed path can use either form. The share list and folder browsing use a plain directory listing through salt; only getrichacl / setrichacl jobs run in tmux on the DSX.
 
 **On the DSX**, WARDEN keeps its files in `/var/tmp/hs-warden/`:
 
@@ -200,7 +224,7 @@ Undo must run from the host that made the change. Changes made through salt are 
 
 Menu **7** reads permissions from two copies of a tree and reports what differs. It is read-only.
 
-1. **Source**: choose the tool and root path (for example NFSv4 on the old filer's mount, or richacl through salt on `/hs/projects`).
+1. **Source**: choose the tool and root path (for example NFSv4 on the old filer's mount, or richacl through salt: pick the share and folder from the list).
 2. **Destination**: same, for the copy (for example richacl on `/hs/projects` after the migration).
 3. **Options**:
 

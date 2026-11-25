@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 — 2026-11-24
+- Hammerspace targets (menu 2, and Compare): the shares in `/mnt/smb-data-portal` on the DSX are listed to pick
+  from, then a folder browser (number = open, `..` = up, Enter = use it) or a typed path deeper inside the share.
+- Paths are shown with their Anvil (`/hs/...`) equivalent.
+- Menu 2 says the tool must be chosen first when it isn't.
+
 ## 1.1.0 — 2026-11-24
 - Hammerspace PS look and versioning, as in hs-cerberus: launch banner with the Hammerspace logo
   (short header on narrow terminals), title boxes, `[INFO] [OK] [WARN] [ERR]` messages, grouped main menu.

@@ -23,7 +23,7 @@ Each side can use a different tool on a different host. For example:
 
 1. Start hs-warden and choose **7**.
 2. **Source**: choose the tool, then the root path (for example `/mnt/oldfiler/projects`).
-3. **Destination**: choose the tool, then the root path (for example `/hs/projects`).
+3. **Destination**: choose the tool, then the root path. For Hammerspace, pick the share from the list and browse to the folder (for example `projects`).
 4. Answer the options:
 
 | Question | Default | Choose yes when |
