@@ -84,7 +84,7 @@ The first screen shows the Hammerspace logo banner with the version; later scree
 
 | Option | What it does |
 |---|---|
-| 3 View | Standard table for each target; with recursive, a count of objects below and how many distinct ACLs they have. Optional native text. |
+| 3 View | Standard table for each target (only the target, never the tree below), then whether its permissions are passed on: recursive / partly / not, how many entries go to subfolders and files, inherit-only and one-level entries, explicit vs inherited, and for richacl automatic inheritance and protected. Optional native text. |
 | 4 Grant | Who → allow/deny → access level → applies to (inheritance) → replace or add. |
 | 5 Remove | Pick entry numbers from the table; the same principal/type is removed from every object in scope. |
 | 6 Edit | Opens the native ACL in `$EDITOR` (NFSv4 text, richacl text, SDDL for icacls, octal or symbolic mode for chmod). |
@@ -104,7 +104,7 @@ The first screen shows the Hammerspace logo banner with the version; later scree
 
 **tmux.** On any Hammerspace node (Anvil or DSX), WARDEN relaunches itself inside a tmux session named `hs-warden` if it was started outside tmux. If that session already exists you can attach to it or start a new one. Detach with `Ctrl-b d`; reattach with `tmux attach -t hs-warden`. If tmux isn't installed, the Hammerspace option is turned off.
 
-From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on the DSX, on WARDEN's own tmux server (`tmux -L hs-warden ls` lists them; `tmux -L hs-warden attach -t warden-<job id>` attaches), so other tmux sessions or a `~/.tmux.conf` there don't affect it. If you press Ctrl-C while waiting, WARDEN asks whether to keep waiting; the job keeps running on the DSX either way. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
+From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on the DSX. The tmux server is started in its own systemd scope (`systemd-run --scope`, as hs-cerberus does), or with salt `cmd.run_bg`, because a tmux server started straight from salt `cmd.run` can be killed when the salt call returns; WARDEN checks each job really started and switches method if not. It runs on WARDEN's own tmux server (`tmux -L hs-warden ls` lists them; `tmux -L hs-warden attach -t warden-<job id>` attaches), so other tmux sessions or a `~/.tmux.conf` there don't affect it. If you press Ctrl-C while waiting, WARDEN asks whether to keep waiting; the job keeps running on the DSX either way. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
 
 **Choosing targets.** With the Hammerspace tool, menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX (hidden folders such as `.snapshot` left out). Pick one, then:
 

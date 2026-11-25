@@ -7,7 +7,7 @@
 # ==============================================================================
 # Project:         Hammerspace PS Warden (github.com/vjason1/hs-warden)
 # Script:          hs-warden.py
-# Version:         1.2.2
+# Version:         1.3.0
 # Updated:         2026-11-24
 # Authors:         Jason Ventresco, Hammerspace Solutions Engineering
 #                  (with Claude)
@@ -84,6 +84,15 @@
 #    DSX; write access to /var/tmp/hs-warden on the DSX.
 #
 #  CHANGELOG:
+#    1.3.0 (2026-11-24)  DSX jobs: the tmux server is started in its own systemd
+#                        scope (systemd-run --scope, as hs-cerberus does), or with
+#                        salt cmd.run_bg, because a tmux server started straight
+#                        from salt cmd.run was killed before the job ran. WARDEN
+#                        checks the job really started and tries the next method
+#                        if not. View (menu 3) reads only the target(s), never the
+#                        tree below, and says whether the permissions are passed
+#                        on (recursive): per entry type, inherit-only, one level,
+#                        explicit vs inherited, richacl auto-inherit / protected.
 #    1.2.2 (2026-11-24)  DSX jobs: WARDEN's own tmux server on the DSX (tmux -L
 #                        hs-warden -f /dev/null) so an existing tmux server or
 #                        ~/.tmux.conf can't interfere; runner start/exit lines in
@@ -137,7 +146,7 @@ import sys
 import tempfile
 import time
 
-TOOLKIT_VERSION = "1.2.2"
+TOOLKIT_VERSION = "1.3.0"
 VERSION = TOOLKIT_VERSION
 PROG = "hs-warden"
 DISPLAY_NAME = "Hammerspace PS Warden"
@@ -1245,6 +1254,14 @@ class ExecError(Exception):
     pass
 
 
+class JobVanished(Exception):
+    """A DSX job's tmux session ended without writing a result."""
+
+    def __init__(self, msg, launcher=None):
+        Exception.__init__(self, msg)
+        self.launcher = launcher
+
+
 class ExecAbandoned(Exception):
     """Stopped waiting for a remote job that may still finish."""
 
@@ -1342,6 +1359,20 @@ class SaltExec(object):
 
     def run(self, job, what="Working"):
         self.setup()
+        attempts = len(self.LAUNCHERS) if job.get("op") in ("read", "probe") else 1
+        for n in range(attempts):
+            try:
+                return self._run_once(job, what)
+            except JobVanished as e:
+                if n + 1 >= attempts:
+                    raise ExecError(str(e))
+                nxt = self.LAUNCHERS[(self.LAUNCHERS.index(e.launcher) + 1) % len(self.LAUNCHERS)] \
+                    if e.launcher in self.LAUNCHERS else self.LAUNCHERS[0]
+                warn("The read job on {} stopped before finishing; retrying with {}.".format(
+                    self.node, "salt cmd.run_bg" if nxt == "run_bg" else "a systemd scope"))
+                self.launcher = nxt
+
+    def _run_once(self, job, what):
         jid = new_id()
         sess = "warden-" + jid
         jf = "{}/jobs/{}.json".format(REMOTE_DIR, jid)
@@ -1369,16 +1400,13 @@ class SaltExec(object):
         inner = ("cd / ; echo WARDEN_RUNNER_START $(date +%Y-%m-%dT%H:%M:%S) >> {log} ; "
                  "python3 {a} --agent --job-file {j} --result-file {r} >> {log} 2>&1 ; "
                  "echo WARDEN_RUNNER_EXIT $? >> {log}").format(log=log, a=REMOTE_AGENT, j=jf, r=rf)
-        o = self._cmd("echo WARDEN_QUEUED $(date +%Y-%m-%dT%H:%M:%S) > {log} && {t} new-session -d -s {s} {c} "
-                      "&& echo WARDEN_STARTED".format(log=q(log), t=REMOTE_TMUX, s=sess, c=q(inner)))
-        if "WARDEN_STARTED" not in o:
-            raise ExecError("Could not start the tmux job on {}:\n{}\n{}".format(
-                self.node, o.strip()[:500], self._diagnose(sess, rf)))
+        self._launch(jid, sess, jf, rf, log, inner)
         poll = ("if [ -f {r} ]; then cat {r}; rm -f {r} {r}.log {j}; "
                 "elif {t} has-session -t {s} 2>/dev/null; then echo WARDEN_PENDING; "
                 "else echo WARDEN_GONE; fi").format(r=rf, j=jf, s=sess, t=REMOTE_TMUX)
         t0 = time.time()
         misses = gone = 0
+        shown = False
         time.sleep(1)
         while True:
             try:
@@ -1395,6 +1423,7 @@ class SaltExec(object):
                 if self._stop_waiting(sess, rf):
                     raise ExecAbandoned("{} tmux session {} on {}".format(what, sess, self.node))
             if o.startswith("WARDEN_PENDING"):
+                shown = True
                 el = int(time.time() - t0)
                 sys.stdout.write("\r  {}{} on {} ... {}s (Ctrl-C for options){}".format(C.D, what, self.node, el, C.X))
                 sys.stdout.flush()
@@ -1404,14 +1433,16 @@ class SaltExec(object):
                     if self._stop_waiting(sess, rf):
                         raise ExecAbandoned("{} tmux session {} on {}".format(what, sess, self.node))
                 continue
-            sys.stdout.write("\r" + " " * 100 + "\r")
+            if shown:
+                sys.stdout.write("\r" + " " * 100 + "\r")
+                shown = False
             if o.startswith("WARDEN_GONE"):
                 gone += 1
                 if gone < 3:          # the result may land a moment after the session ends
                     time.sleep(2)
                     continue
-                raise ExecError("The job on {} ended without a result (tmux session {}).\n{}".format(
-                    self.node, sess, self._diagnose(sess, rf)))
+                raise JobVanished("The job on {} ended without a result (tmux session {}).\n{}".format(
+                    self.node, sess, self._diagnose(sess, rf)), getattr(self, "launcher", None))
             try:
                 res = json.loads(o)
             except ValueError:
@@ -1420,12 +1451,63 @@ class SaltExec(object):
                 raise ExecError(res["error"])
             return res
 
+    # How the tmux server is started on the DSX. A tmux server started straight
+    # from salt cmd.run can be killed when the salt call returns (seen on
+    # DSX nodes: the session vanished before running anything), so it is started
+    # in its own systemd scope (as hs-cerberus does with systemd-run), or with
+    # salt's cmd.run_bg. The first method that works is kept for the session.
+    LAUNCHERS = ("scope", "run_bg")
+
+    def _launch(self, jid, sess, jf, rf, log, inner):
+        tmux_cmd = "{} new-session -d -s {} {}".format(REMOTE_TMUX, sess, q(inner))
+        order = [self.launcher] if getattr(self, "launcher", None) else list(self.LAUNCHERS)
+        tried = []
+        for how in order:
+            self._cmd("echo WARDEN_QUEUED $(date +%Y-%m-%dT%H:%M:%S) via {} > {}".format(how, q(log)))
+            if how == "scope":
+                o = self._cmd("command -v systemd-run >/dev/null 2>&1 || {{ echo WARDEN_NO_SYSTEMD_RUN; exit 0; }}; "
+                              "systemd-run --scope --quiet --unit hs-warden-{} {} 2>&1 && echo WARDEN_STARTED".format(
+                                  jid, tmux_cmd))
+            else:
+                d = salt_json(_salt_target([self.node]) + ["cmd.run_bg", tmux_cmd], timeout=30)
+                o = "WARDEN_STARTED" if isinstance(d.get(self.node), dict) and d[self.node].get("pid") else json.dumps(d)
+            if "WARDEN_STARTED" not in o:
+                tried.append("{}: {}".format(how, o.strip()[:300]))
+                continue
+            state = self._wait_start(sess, rf, log)
+            if state == "started":
+                if getattr(self, "launcher", None) != how:
+                    self.launcher = how
+                    if tried:
+                        info("DSX jobs on {} start through {}.".format(self.node, "a systemd scope" if how == "scope"
+                                                                         else "salt cmd.run_bg"))
+                return
+            tried.append("{}: the tmux session ended before the job started".format(how))
+        self.launcher = None
+        raise ExecError("Could not start the job in tmux on {} ({}).\n{}".format(
+            self.node, "; ".join(tried), self._diagnose(sess, rf)))
+
+    def _wait_start(self, sess, rf, log):
+        """'started' once the runner wrote its start line (or a result exists);
+        'gone' if the tmux session vanished first."""
+        chk = ("[ -f {r} ] && echo HAS_RESULT; grep -q WARDEN_RUNNER_START {l} 2>/dev/null && echo HAS_START; "
+               "{t} has-session -t {s} 2>/dev/null && echo ALIVE; true").format(r=rf, l=log, t=REMOTE_TMUX, s=sess)
+        for _ in range(8):
+            o = self._cmd(chk)
+            if "HAS_RESULT" in o or "HAS_START" in o:
+                return "started"
+            if "ALIVE" not in o:
+                return "gone"
+            time.sleep(1)
+        return "started"   # session alive, still starting: let the normal poll take over
+
     def _diagnose(self, sess, rf):
         """What the DSX can tell us about a job that didn't produce a result."""
         cmd = ("echo '--- job log ({r}.log)'; cat {r}.log 2>&1; "
                "echo '--- job folder'; ls -la {d}/jobs 2>&1 | tail -12; "
                "echo '--- tmux (socket hs-warden)'; {t} ls 2>&1; tmux -V 2>&1; "
                "echo '--- python / agent'; command -v python3; python3 -V 2>&1; python3 {a} --version 2>&1; "
+               "echo '--- systemd-run'; command -v systemd-run || echo none; "
                "echo '--- user / tmp'; id; ls -ld /tmp /var/tmp {d} 2>&1").format(
                    r=rf, d=REMOTE_DIR, t=REMOTE_TMUX, a=REMOTE_AGENT)
         try:
@@ -1861,25 +1943,63 @@ def read_state(paths=None, recursive=None, be=None, ex=None, owner=False, displa
     return items, res.get("truncated", False)
 
 
+def inherit_summary(be, meta, ents, is_dir):
+    """Plain-language lines: does this target pass its permissions on?"""
+    L = []
+    if be.key == "chmod":
+        return ["Mode bits apply to this object only; they are not inherited by its contents."]
+    explicit = [e for e in ents if not e.get("inherited")]
+    inherited = [e for e in ents if e.get("inherited")]
+    if is_dir:
+        both = [e for e in ents if "f" in e["inherit"] and "d" in e["inherit"]]
+        donly = [e for e in ents if "d" in e["inherit"] and "f" not in e["inherit"]]
+        fonly = [e for e in ents if "f" in e["inherit"] and "d" not in e["inherit"]]
+        none = [e for e in ents if not set(e["inherit"]) & set("fd")]
+        ionly = [e for e in ents if "i" in e["inherit"]]
+        onelevel = [e for e in ents if "n" in e["inherit"]]
+        passed = len(ents) - len(none)
+        if not passed:
+            L.append("Not recursive: none of the {} entries is passed on; new files and folders inside "
+                     "won't inherit them.".format(len(ents)))
+        elif not none:
+            L.append("Recursive: all {} entries are passed on to new contents.".format(len(ents)))
+        else:
+            L.append("Partly recursive: {} of {} entries are passed on to new contents; {} apply to this "
+                     "folder only.".format(passed, len(ents), len(none)))
+        if passed:
+            L.append("  to subfolders and files: {}   subfolders only: {}   files only: {}".format(
+                len(both), len(donly), len(fonly)))
+        if ionly:
+            L.append("  {} entr{} apply only to the contents, not to this folder (inherit only).".format(
+                len(ionly), "y" if len(ionly) == 1 else "ies"))
+        if onelevel:
+            L.append("  {} entr{} stop after one level (no_propagate).".format(len(onelevel), "y" if len(onelevel) == 1 else "ies"))
+    else:
+        L.append("File: inheritance doesn't apply to its own entries.")
+    L.append("Explicit (set here): {}   Inherited from the parent: {}".format(len(explicit), len(inherited)))
+    flags = (meta or {}).get("flags")
+    if be.key == "richacl" and flags is not None:
+        f = set(flags)
+        L.append("ACL flags '{}': automatic inheritance {}; {}.".format(
+            flags or "-", "ON" if "a" in f else "off",
+            "PROTECTED (doesn't take entries from its parent)" if "p" in f else "takes entries from its parent"))
+    L.append("Existing contents are not checked here; use Compare (7), or View with a single sub-folder, "
+             "to see what they actually have.")
+    return L
+
+
 def do_view():
     need_targets()
-    items, trunc = read_state()
-    tops = [i for i in items if i.get("top") and not i.get("error")]
+    items, trunc = read_state(recursive=False)          # the targets only, never the whole tree
+    tops = [i for i in items if not i.get("error")]
     for it in tops:
-        sub("{}  ({})".format(it["path"], "directory" if it["is_dir"] else "file"))
+        sub("{}  ({})".format(show_path(S.ex, it["path"]), "directory" if it["is_dir"] else "file"))
         meta, ents = parse_item(S.be, it)
         print_table(S.be, ents, it["is_dir"], meta=meta)
-    if S.recursive and len(items) > len(tops):
-        others = [i for i in items if not i.get("top") and not i.get("error")]
-        groups = {}
-        for i in others:
-            groups.setdefault(norm_text(i.get("raw")), []).append(i)
-        sub("Below the target(s): {} objects, {} distinct ACL(s)".format(len(others), len(groups)))
-        for n, (raw, lst) in enumerate(sorted(groups.items(), key=lambda kv: -len(kv[1]))[:5]):
-            out("    {} object(s), e.g. {}".format(len(lst), lst[0]["path"]))
-        if len(groups) > 5:
-            out("    ... {} more distinct ACLs".format(len(groups) - 5))
-    if confirm("Show the native ({}) text as well?".format(S.be.short), False):
+        out("")
+        for l in inherit_summary(S.be, meta, ents, it["is_dir"]):
+            (dim if l.startswith("Existing contents") else out)("    " + l)
+    if tops and confirm("Show the native ({}) text as well?".format(S.be.short), False):
         for it in tops:
             sub("native: " + it["path"])
             out(it.get("display") or it.get("raw"))

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — 2026-11-24
+- DSX jobs: the tmux server is started in its own systemd scope (`systemd-run --scope`, as hs-cerberus does), or
+  with salt `cmd.run_bg`. A tmux server started straight from salt `cmd.run` was killed before the job ran.
+  WARDEN checks each job really started and switches method if not; read-only jobs that stop part-way are retried.
+- View (menu 3) reads only the chosen target(s), never the tree below, and says whether the permissions are passed
+  on: recursive / partly / not, entries to subfolders and files, inherit-only, one level, explicit vs inherited,
+  and richacl automatic inheritance / protected.
+
 ## 1.2.2 — 2026-11-24
 - DSX jobs run on WARDEN's own tmux server on the DSX (`tmux -L hs-warden -f /dev/null`), so an existing tmux
   server or `~/.tmux.conf` can't interfere. Attach to a running job with `tmux -L hs-warden attach -t warden-<id>`.

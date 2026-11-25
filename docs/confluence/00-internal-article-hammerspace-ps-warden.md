@@ -1,11 +1,11 @@
-# Hammerspace PS Warden (hs-warden) v1.2.2
+# Hammerspace PS Warden (hs-warden) v1.3.0
 
 **W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
 File permission management, undo, and migration permission audit for Hammerspace engagements.
 
 | | |
 |---|---|
-| Version | 1.2.2 (2026-11-24) |
+| Version | 1.3.0 (2026-11-24) |
 | Download | hs-warden.py (attached to this page) |
 | Script | hs-warden.py (single file) |
 | Runs on | Hammerspace Anvil and DSX, Linux / macOS NFS clients, Windows |
@@ -31,7 +31,7 @@ File permission management, undo, and migration permission audit for Hammerspace
 *                                 \_____________/                                 *
 *                    H A M M E R S P A C E   P S   W A R D E N                    *
 *                                   W.A.R.D.E.N.                                  *
-*                                      v1.2.2                                     *
+*                                      v1.3.0                                     *
 ***********************************************************************************
 ```
 
@@ -99,7 +99,7 @@ Access is shown as a standard level (Full Control, Modify, Read & Execute, Read,
 | Rule | How hs-warden handles it |
 |---|---|
 | getrichacl / setrichacl only on a DSX | On a DSX it runs them locally. On the active Anvil you pick a DSX from salt (`pd-node-type` grain `dsx`) and it runs them there. Anywhere else the option is unavailable. |
-| Always in tmux | On any Anvil or DSX, hs-warden relaunches itself in tmux session `hs-warden`. From the Anvil, each DSX job runs in its own detached tmux session on the DSX (`warden-<id>`, on WARDEN's own tmux server: `tmux -L hs-warden ls`). |
+| Always in tmux | On any Anvil or DSX, hs-warden relaunches itself in tmux session `hs-warden`. From the Anvil, each DSX job runs in its own detached tmux session on the DSX (`warden-<id>`, on hs-warden's own tmux server: `tmux -L hs-warden ls`). That tmux server is started in its own systemd scope, as hs-cerberus does, so it survives the salt call. |
 | Survive dropped sessions | Reattach with `tmux attach -t hs-warden`. DSX jobs keep running if salt or SSH drops; hs-warden collects the result. |
 | Picking targets | Menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX; pick one, then browse or type a path deeper inside it. Paths are shown with their Anvil (`/hs/...`) equivalent. |
 | Same code on both ends | The Anvil copies itself to `/var/tmp/hs-warden/` on the DSX with salt-cp and checks it by SHA-256 each session. |
@@ -140,7 +140,7 @@ python3 /home/serviceadmin/hs-warden.py
 
 4. **1** → Hammerspace richacl [via salt] → pick the DSX.
 5. **2** → pick the share from the list, then press Enter to use it, open sub-folders by number, or type a path inside it (e.g. `Lab/Smith`). Then choose whether to include everything below it.
-6. **3** to look, **4** to grant, **5** to remove. Read the preview, then **a** to apply.
+6. **3** to see the target's permissions and whether they're passed on to subfolders and files, **4** to grant, **5** to remove. Read the preview, then **a** to apply.
 7. Made a mistake? **9** → pick the change → confirm.
 
 Type `b` at any prompt to go back. `python3 hs-warden.py -v` prints the version; `-h` prints help.
@@ -219,6 +219,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.3.0 | 2026-11-24 | DSX jobs start their tmux server in a systemd scope (or salt cmd.run_bg) so it survives the salt call. View shows only the chosen target and whether its permissions are passed on (recursive). |
 | 1.2.2 | 2026-11-24 | DSX jobs use their own tmux server (`tmux -L hs-warden`); diagnostics from the DSX when a job fails. |
 | 1.2.1 | 2026-11-24 | Fix: picking a DSX when there is more than one. |
 | 1.2.0 | 2026-11-24 | Hammerspace targets: shares in /mnt/smb-data-portal are listed to pick from, with a folder browser or a typed path deeper inside the share (menu 2 and Compare). |
