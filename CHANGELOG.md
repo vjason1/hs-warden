@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.2 — 2026-11-24
+- DSX jobs run on WARDEN's own tmux server on the DSX (`tmux -L hs-warden -f /dev/null`), so an existing tmux
+  server or `~/.tmux.conf` can't interfere. Attach to a running job with `tmux -L hs-warden attach -t warden-<id>`.
+- The job log records when tmux started the runner and its exit code.
+- When a job ends without a result, WARDEN shows diagnostics from the DSX: job log, job folder, tmux sessions and
+  version, python3 and agent version, user, /tmp and /var/tmp.
+
 ## 1.2.1 — 2026-11-24
 - Fix: with more than one DSX, picking a DSX passed the menu number to salt instead of the node name
   ("1 did not answer salt").

@@ -342,7 +342,7 @@ Environment: `HS_WARDEN_HOME` (log folder), `EDITOR` / `VISUAL` (editor for menu
 | `salt-cp did not deliver the agent` | Check free space and permissions on `/var/tmp` on the DSX. |
 | `skipped: changed since it was read` | Someone else changed that object after your preview. View it again and redo the change. |
 | `Stopped at N objects (--max-items N)` | Narrow the target, or rerun with a larger `--max-items`. |
-| `The job … ended without a result` | WARDEN shows the last lines of the job log from the DSX; the log is `/var/tmp/hs-warden/jobs/<id>.result.log`. |
+| `The job … ended without a result` | WARDEN prints diagnostics from the DSX (job log, job folder, tmux, python3, agent version, user, /tmp). The job log is `/var/tmp/hs-warden/jobs/<id>.result.log`. |
 | `Change … was made from <host>; run the undo there` | Undo on the host that made the change (its log folder has the snapshot). |
 
 ## Versioning

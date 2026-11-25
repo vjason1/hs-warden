@@ -75,7 +75,7 @@ hs-warden works with the DSX path and shows the Anvil path next to it. A typed f
 Each read or change is a **job**:
 
 1. The job is written to `/var/tmp/hs-warden/jobs/<id>.json` on the DSX.
-2. salt starts it in a **detached tmux session** on the DSX, named `warden-<id>`.
+2. salt starts it in a **detached tmux session** on the DSX, named `warden-<id>`, on WARDEN's own tmux server (`tmux -L hs-warden ls` lists them; `tmux -L hs-warden attach -t warden-<id>` attaches).
 3. The Anvil checks for the result every couple of seconds and shows a timer.
 4. The result is collected and the job files are removed.
 

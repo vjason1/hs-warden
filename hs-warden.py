@@ -7,7 +7,7 @@
 # ==============================================================================
 # Project:         Hammerspace PS Warden (github.com/vjason1/hs-warden)
 # Script:          hs-warden.py
-# Version:         1.2.1
+# Version:         1.2.2
 # Updated:         2026-11-24
 # Authors:         Jason Ventresco, Hammerspace Solutions Engineering
 #                  (with Claude)
@@ -84,6 +84,13 @@
 #    DSX; write access to /var/tmp/hs-warden on the DSX.
 #
 #  CHANGELOG:
+#    1.2.2 (2026-11-24)  DSX jobs: WARDEN's own tmux server on the DSX (tmux -L
+#                        hs-warden -f /dev/null) so an existing tmux server or
+#                        ~/.tmux.conf can't interfere; runner start/exit lines in
+#                        the job log; a short grace period before a job counts as
+#                        gone; and full diagnostics from the DSX (job log, job
+#                        folder, tmux sessions and version, python3 and agent
+#                        version, user, /tmp and /var/tmp) when a job fails.
 #    1.2.1 (2026-11-24)  Fix: with more than one DSX, picking a DSX passed the menu
 #                        number to salt instead of the node name ("1 did not
 #                        answer salt").
@@ -130,7 +137,7 @@ import sys
 import tempfile
 import time
 
-TOOLKIT_VERSION = "1.2.1"
+TOOLKIT_VERSION = "1.2.2"
 VERSION = TOOLKIT_VERSION
 PROG = "hs-warden"
 DISPLAY_NAME = "Hammerspace PS Warden"
@@ -142,6 +149,7 @@ PORTAL = "/mnt/smb-data-portal"          # share root on a DSX
 ANVIL_SHARES = "/hs"                     # share root on the Anvil
 REMOTE_DIR = "/var/tmp/hs-warden"        # agent copy, jobs and results on a DSX
 REMOTE_AGENT = REMOTE_DIR + "/hs-warden.py"
+REMOTE_TMUX = "tmux -L hs-warden -f /dev/null"   # own tmux server on the DSX for WARDEN jobs
 TMUX_SESSION = "hs-warden"
 DEFAULT_MAX_ITEMS = 20000
 STANDARD_LEVELS = ["Full Control", "Modify", "Read & Execute", "Read", "Write"]
@@ -1354,15 +1362,24 @@ class SaltExec(object):
                     raise ExecError("salt-cp of the job file failed: " + o[:300])
             finally:
                 os.unlink(tmp)
-        inner = "python3 {} --agent --job-file {} --result-file {} > {}.log 2>&1".format(REMOTE_AGENT, jf, rf, rf)
-        o = self._cmd("tmux new-session -d -s {} {} && echo WARDEN_STARTED".format(sess, q(inner)))
+        log = rf + ".log"
+        # Own tmux server (-L hs-warden) with no config file (-f /dev/null), so
+        # an existing root tmux server or a ~/.tmux.conf on the DSX can't change
+        # how the job runs. The runner lines in the log show whether tmux ran it.
+        inner = ("cd / ; echo WARDEN_RUNNER_START $(date +%Y-%m-%dT%H:%M:%S) >> {log} ; "
+                 "python3 {a} --agent --job-file {j} --result-file {r} >> {log} 2>&1 ; "
+                 "echo WARDEN_RUNNER_EXIT $? >> {log}").format(log=log, a=REMOTE_AGENT, j=jf, r=rf)
+        o = self._cmd("echo WARDEN_QUEUED $(date +%Y-%m-%dT%H:%M:%S) > {log} && {t} new-session -d -s {s} {c} "
+                      "&& echo WARDEN_STARTED".format(log=q(log), t=REMOTE_TMUX, s=sess, c=q(inner)))
         if "WARDEN_STARTED" not in o:
-            raise ExecError("Could not start the tmux job on {}: {}".format(self.node, o.strip()[:300]))
+            raise ExecError("Could not start the tmux job on {}:\n{}\n{}".format(
+                self.node, o.strip()[:500], self._diagnose(sess, rf)))
         poll = ("if [ -f {r} ]; then cat {r}; rm -f {r} {r}.log {j}; "
-                "elif tmux has-session -t {s} 2>/dev/null; then echo WARDEN_PENDING; "
-                "else echo WARDEN_GONE; tail -40 {r}.log 2>/dev/null; fi").format(r=rf, j=jf, s=sess)
+                "elif {t} has-session -t {s} 2>/dev/null; then echo WARDEN_PENDING; "
+                "else echo WARDEN_GONE; fi").format(r=rf, j=jf, s=sess, t=REMOTE_TMUX)
         t0 = time.time()
-        misses = 0
+        misses = gone = 0
+        time.sleep(1)
         while True:
             try:
                 o = self._cmd(poll, timeout=120).strip()
@@ -1370,7 +1387,7 @@ class SaltExec(object):
                 misses += 1
                 if misses >= 5:
                     raise ExecError("{} stopped answering salt; the job may still be running in tmux session "
-                                    "{} there (result file {}).".format(self.node, sess, rf))
+                                    "{} there (socket hs-warden; result file {}).".format(self.node, sess, rf))
                 time.sleep(3)
                 continue
             except KeyboardInterrupt:
@@ -1387,9 +1404,14 @@ class SaltExec(object):
                     if self._stop_waiting(sess, rf):
                         raise ExecAbandoned("{} tmux session {} on {}".format(what, sess, self.node))
                 continue
-            sys.stdout.write("\r" + " " * 78 + "\r")
+            sys.stdout.write("\r" + " " * 100 + "\r")
             if o.startswith("WARDEN_GONE"):
-                raise ExecError("The job on {} ended without a result:\n{}".format(self.node, o[11:].strip()))
+                gone += 1
+                if gone < 3:          # the result may land a moment after the session ends
+                    time.sleep(2)
+                    continue
+                raise ExecError("The job on {} ended without a result (tmux session {}).\n{}".format(
+                    self.node, sess, self._diagnose(sess, rf)))
             try:
                 res = json.loads(o)
             except ValueError:
@@ -1398,9 +1420,24 @@ class SaltExec(object):
                 raise ExecError(res["error"])
             return res
 
+    def _diagnose(self, sess, rf):
+        """What the DSX can tell us about a job that didn't produce a result."""
+        cmd = ("echo '--- job log ({r}.log)'; cat {r}.log 2>&1; "
+               "echo '--- job folder'; ls -la {d}/jobs 2>&1 | tail -12; "
+               "echo '--- tmux (socket hs-warden)'; {t} ls 2>&1; tmux -V 2>&1; "
+               "echo '--- python / agent'; command -v python3; python3 -V 2>&1; python3 {a} --version 2>&1; "
+               "echo '--- user / tmp'; id; ls -ld /tmp /var/tmp {d} 2>&1").format(
+                   r=rf, d=REMOTE_DIR, t=REMOTE_TMUX, a=REMOTE_AGENT)
+        try:
+            o = self._cmd(cmd, timeout=60)
+        except ExecError as e:
+            o = str(e)
+        return "Diagnostics from {}:\n{}".format(self.node, "\n".join("    " + l for l in o.splitlines()))
+
     def _stop_waiting(self, sess, rf):
         out("")
-        warn("The job keeps running on {} in tmux session {} (result: {}).".format(self.node, sess, rf))
+        warn("The job keeps running on {} in tmux session {} (tmux -L hs-warden; result: {}).".format(
+            self.node, sess, rf))
         try:
             return not confirm("Keep waiting for it?", True)
         except Back:

@@ -139,6 +139,6 @@ On a DSX used through salt (`/var/tmp/hs-warden`):
 | salt-cp did not deliver the agent | Check space and permissions in /var/tmp on the DSX. |
 | skipped: changed since it was read | Another change happened after your preview. View it again and redo the change. |
 | Stopped at N objects (--max-items N) | Narrow the target or raise --max-items. |
-| The job … ended without a result | The last lines of the DSX job log are shown; the file is /var/tmp/hs-warden/jobs/\<id\>.result.log. |
+| The job … ended without a result | Diagnostics from the DSX are shown (job log, job folder, tmux, python3, agent version, user, /tmp). The job log is /var/tmp/hs-warden/jobs/\<id\>.result.log. |
 | Change … was made from \<host\>; run the undo there | Undo on the host that made the change. |
 | Operation to request attribute not supported (NFSv4) | The path isn't on an NFSv4 mount with ACL support. |
