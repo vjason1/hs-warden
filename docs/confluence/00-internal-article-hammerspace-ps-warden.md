@@ -1,11 +1,11 @@
-# Hammerspace PS Warden (hs-warden) v1.2.0
+# Hammerspace PS Warden (hs-warden) v1.2.1
 
 **W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
 File permission management, undo, and migration permission audit for Hammerspace engagements.
 
 | | |
 |---|---|
-| Version | 1.2.0 (2026-11-24) |
+| Version | 1.2.1 (2026-11-24) |
 | Download | hs-warden.py (attached to this page) |
 | Script | hs-warden.py (single file) |
 | Runs on | Hammerspace Anvil and DSX, Linux / macOS NFS clients, Windows |
@@ -31,7 +31,7 @@ File permission management, undo, and migration permission audit for Hammerspace
 *                                 \_____________/                                 *
 *                    H A M M E R S P A C E   P S   W A R D E N                    *
 *                                   W.A.R.D.E.N.                                  *
-*                                      v1.2.0                                     *
+*                                      v1.2.1                                     *
 ***********************************************************************************
 ```
 
@@ -219,6 +219,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.2.1 | 2026-11-24 | Fix: picking a DSX when there is more than one. |
 | 1.2.0 | 2026-11-24 | Hammerspace targets: shares in /mnt/smb-data-portal are listed to pick from, with a folder browser or a typed path deeper inside the share (menu 2 and Compare). |
 | 1.1.0 | 2026-11-24 | Hammerspace PS look and versioning as in hs-cerberus: logo banner, title boxes, `[INFO] [OK] [WARN] [ERR]`, grouped menu, `-v` / `-h`, Python version check, UTF-8 output under salt/tmux. Version recorded in every log, snapshot, plan, report and DSX log line. |
 | 1.0.0 | 2026-11-24 | First release: four backends, standard table, grant / remove / edit with preview, change log, snapshots, undo, migration compare. |

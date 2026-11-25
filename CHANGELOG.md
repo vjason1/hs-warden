@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 — 2026-11-24
+- Fix: with more than one DSX, picking a DSX passed the menu number to salt instead of the node name
+  ("1 did not answer salt").
+
 ## 1.2.0 — 2026-11-24
 - Hammerspace targets (menu 2, and Compare): the shares in `/mnt/smb-data-portal` on the DSX are listed to pick
   from, then a folder browser (number = open, `..` = up, Enter = use it) or a typed path deeper inside the share.

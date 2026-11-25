@@ -7,7 +7,7 @@
 # ==============================================================================
 # Project:         Hammerspace PS Warden (github.com/vjason1/hs-warden)
 # Script:          hs-warden.py
-# Version:         1.2.0
+# Version:         1.2.1
 # Updated:         2026-11-24
 # Authors:         Jason Ventresco, Hammerspace Solutions Engineering
 #                  (with Claude)
@@ -84,6 +84,9 @@
 #    DSX; write access to /var/tmp/hs-warden on the DSX.
 #
 #  CHANGELOG:
+#    1.2.1 (2026-11-24)  Fix: with more than one DSX, picking a DSX passed the menu
+#                        number to salt instead of the node name ("1 did not
+#                        answer salt").
 #    1.2.0 (2026-11-24)  Hammerspace targets (menu 2, and Compare): the shares in
 #                        /mnt/smb-data-portal on the DSX are listed to pick from,
 #                        then a folder browser (number = open, .. = up, Enter =
@@ -127,7 +130,7 @@ import sys
 import tempfile
 import time
 
-TOOLKIT_VERSION = "1.2.0"
+TOOLKIT_VERSION = "1.2.1"
 VERSION = TOOLKIT_VERSION
 PROG = "hs-warden"
 DISPLAY_NAME = "Hammerspace PS Warden"
@@ -1559,7 +1562,8 @@ def pick_dsx():
     if len(nodes) == 1:
         ok("DSX node: " + nodes[0])
         return nodes[0]
-    return choose("Run getrichacl / setrichacl on which DSX?", [(str(i + 1), n) for i, n in enumerate(nodes)], "1")
+    c = choose("Run getrichacl / setrichacl on which DSX?", [(str(i + 1), n) for i, n in enumerate(nodes)], "1")
+    return nodes[int(c) - 1]
 
 
 def select_backend(prompt="Which permission tool?", default_key=None):
