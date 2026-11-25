@@ -19,7 +19,7 @@ Example:
 
 ```
   PROPOSED CHANGE: Set allow Modify (rwpxDaARWcS) alice@ad.local (This folder, subfolders and files) on 1 target(s), recursive
-  Tool: Hammerspace richacl (getrichacl / setrichacl on a DSX)   Runs on: DSX dsx1 (salt from anvil1, tmux on the DSX)
+  Tool: Hammerspace richacl (getrichacl / setrichacl on a DSX)   Runs on: DSX dsx1 (salt from anvil1)
 
   After:
     #   Principal                      Type   Access                        Applies to                         Inherited

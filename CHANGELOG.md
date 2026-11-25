@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 — 2026-11-24
+- tmux on the Anvil only. Each DSX job is one salt `cmd.run` call (job file and run in the same call; the result
+  comes back in the salt output). Nothing runs in tmux on the DSX, and the DSX no longer needs tmux.
+- Ctrl-C while waiting for a DSX change logs it as UNCONFIRMED so it can still be undone.
+- View (menu 3) shows only the chosen target and whether its permissions are recursive (from 1.3.0).
+
 ## 1.3.0 — 2026-11-24
 - DSX jobs: the tmux server is started in its own systemd scope (`systemd-run --scope`, as hs-cerberus does), or
   with salt `cmd.run_bg`. A tmux server started straight from salt `cmd.run` was killed before the job ran.

@@ -43,7 +43,7 @@ On screen you get the totals and the first 15 differences:
 ```
   COMPARE RESULT
   Source:       /mnt/oldfiler/projects  (NFSv4 on this host (anvil1))
-  Destination:  /mnt/smb-data-portal/projects  (Hammerspace on DSX dsx1 (salt from anvil1, tmux on the DSX))
+  Destination:  /mnt/smb-data-portal/projects  (Hammerspace on DSX dsx1 (salt from anvil1))
   Objects compared: 18234
     Identical                          18102
     Entries / rights differ               97

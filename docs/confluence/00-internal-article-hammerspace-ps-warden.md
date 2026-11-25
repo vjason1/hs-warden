@@ -1,11 +1,11 @@
-# Hammerspace PS Warden (hs-warden) v1.3.0
+# Hammerspace PS Warden (hs-warden) v1.4.0
 
 **W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator**
 File permission management, undo, and migration permission audit for Hammerspace engagements.
 
 | | |
 |---|---|
-| Version | 1.3.0 (2026-11-24) |
+| Version | 1.4.0 (2026-11-24) |
 | Download | hs-warden.py (attached to this page) |
 | Script | hs-warden.py (single file) |
 | Runs on | Hammerspace Anvil and DSX, Linux / macOS NFS clients, Windows |
@@ -31,7 +31,7 @@ File permission management, undo, and migration permission audit for Hammerspace
 *                                 \_____________/                                 *
 *                    H A M M E R S P A C E   P S   W A R D E N                    *
 *                                   W.A.R.D.E.N.                                  *
-*                                      v1.3.0                                     *
+*                                      v1.4.0                                     *
 ***********************************************************************************
 ```
 
@@ -99,8 +99,8 @@ Access is shown as a standard level (Full Control, Modify, Read & Execute, Read,
 | Rule | How hs-warden handles it |
 |---|---|
 | getrichacl / setrichacl only on a DSX | On a DSX it runs them locally. On the active Anvil you pick a DSX from salt (`pd-node-type` grain `dsx`) and it runs them there. Anywhere else the option is unavailable. |
-| Always in tmux | On any Anvil or DSX, hs-warden relaunches itself in tmux session `hs-warden`. From the Anvil, each DSX job runs in its own detached tmux session on the DSX (`warden-<id>`, on hs-warden's own tmux server: `tmux -L hs-warden ls`). That tmux server is started in its own systemd scope, as hs-cerberus does, so it survives the salt call. |
-| Survive dropped sessions | Reattach with `tmux attach -t hs-warden`. DSX jobs keep running if salt or SSH drops; hs-warden collects the result. |
+| Session in tmux | On the Anvil (or a DSX when run there), hs-warden relaunches itself in tmux session `hs-warden`, so a dropped SSH session doesn't stop a change. From the Anvil, each DSX job is one salt `cmd.run` call; nothing runs in tmux on the DSX. |
+| Survive dropped sessions | If SSH drops, the hs-warden session and its salt calls keep running in tmux on the Anvil. Reattach with `tmux attach -t hs-warden`. |
 | Picking targets | Menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX; pick one, then browse or type a path deeper inside it. Paths are shown with their Anvil (`/hs/...`) equivalent. |
 | Same code on both ends | The Anvil copies itself to `/var/tmp/hs-warden/` on the DSX with salt-cp and checks it by SHA-256 each session. |
 | Audit on the DSX | Each change made on a DSX is also logged in `/var/tmp/hs-warden/agent.log` there. |
@@ -196,7 +196,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 ## Before you use it on a customer system
 
 - [ ] Running on the active Anvil (salt-master running) or a DSX, as root
-- [ ] tmux on the Anvil and the DSX; getrichacl, setrichacl and python3 on the DSX
+- [ ] tmux on the Anvil; getrichacl, setrichacl and python3 on the DSX
 - [ ] `salt '*' test.ping` answers from the DSX you'll use
 - [ ] Try the change on one test folder first, then check it with menu 3
 - [ ] For large recursive changes, save the plan (**s**) and get it approved first
@@ -219,6 +219,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 
 | Version | Date | Changes |
 |---|---|---|
+| 1.4.0 | 2026-11-24 | tmux on the Anvil only: each DSX job is one salt cmd.run call; the DSX no longer needs tmux. |
 | 1.3.0 | 2026-11-24 | DSX jobs start their tmux server in a systemd scope (or salt cmd.run_bg) so it survives the salt call. View shows only the chosen target and whether its permissions are passed on (recursive). |
 | 1.2.2 | 2026-11-24 | DSX jobs use their own tmux server (`tmux -L hs-warden`); diagnostics from the DSX when a job fails. |
 | 1.2.1 | 2026-11-24 | Fix: picking a DSX when there is more than one. |
@@ -233,7 +234,7 @@ On the host where you ran hs-warden, in `~/.hs-warden` (change with `--log-dir`)
 Child pages:
 
 - hs-warden: Overview and Quick Start
-- hs-warden: Hammerspace Permissions (DSX, Anvil, salt and tmux)
+- hs-warden: Hammerspace Permissions (DSX, Anvil and salt)
 - hs-warden: Migration Permission Check (Compare)
 - hs-warden: Preview, Change Log and Undo
 - hs-warden: Reference

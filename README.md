@@ -22,7 +22,7 @@ It also has a separate **Compare** function that reads permissions from two copi
 - Single file, Python 3.6+ standard library only (Anvil / DSX ship Python 3.6.8)
 - Same look as the other Hammerspace PS tools (hs-cerberus): logo banner, title boxes, `[INFO] [OK] [WARN] [ERR]` messages
 - Every change is previewed, logged with before/after snapshots, and can be undone
-- Hammerspace work always runs inside tmux
+- The WARDEN session runs inside tmux on Hammerspace nodes; DSX jobs are plain salt calls
 
 ---
 
@@ -30,7 +30,7 @@ It also has a separate **Compare** function that reads permissions from two copi
 
 - [Quick start](#quick-start)
 - [Menu](#menu)
-- [Hammerspace: DSX, Anvil, salt and tmux](#hammerspace-dsx-anvil-salt-and-tmux)
+- [Hammerspace: DSX, Anvil and salt](#hammerspace-dsx-anvil-and-salt)
 - [The standard view](#the-standard-view)
 - [Preview, logging and undo](#preview-logging-and-undo)
 - [Compare: migration permission check](#compare-migration-permission-check)
@@ -92,19 +92,19 @@ The first screen shows the Hammerspace logo banner with the version; later scree
 | 8 Change log | Last 30 changes; pick one for details, commands and its snapshot file. |
 | 9 Undo | Restore the "before" snapshot of a change. |
 
-## Hammerspace: DSX, Anvil, salt and tmux
+## Hammerspace: DSX, Anvil and salt
 
 `getrichacl` and `setrichacl` must only run on a DSX node. WARDEN enforces that:
 
 | WARDEN started on | How richacl work runs |
 |---|---|
 | A DSX (`pd-node-type` grain `dsx`) | Locally on that DSX. |
-| The active Anvil (Salt master) | You pick a DSX from salt (`pd-node-type` grain `dsx`). WARDEN copies itself to the DSX with `salt-cp`, then starts each job in its **own detached tmux session on the DSX** and polls for the result. |
+| The active Anvil (Salt master) | You pick a DSX from salt (`pd-node-type` grain `dsx`). WARDEN copies itself to the DSX with `salt-cp`, then runs each job as **one salt `cmd.run` call**; the result comes back in the salt output. |
 | Anywhere else | Not available (shown greyed out with the reason). |
 
 **tmux.** On any Hammerspace node (Anvil or DSX), WARDEN relaunches itself inside a tmux session named `hs-warden` if it was started outside tmux. If that session already exists you can attach to it or start a new one. Detach with `Ctrl-b d`; reattach with `tmux attach -t hs-warden`. If tmux isn't installed, the Hammerspace option is turned off.
 
-From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on the DSX. The tmux server is started in its own systemd scope (`systemd-run --scope`, as hs-cerberus does), or with salt `cmd.run_bg`, because a tmux server started straight from salt `cmd.run` can be killed when the salt call returns; WARDEN checks each job really started and switches method if not. It runs on WARDEN's own tmux server (`tmux -L hs-warden ls` lists them; `tmux -L hs-warden attach -t warden-<job id>` attaches), so other tmux sessions or a `~/.tmux.conf` there don't affect it. If you press Ctrl-C while waiting, WARDEN asks whether to keep waiting; the job keeps running on the DSX either way. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
+From the Anvil, each DSX job is one salt `cmd.run` call that runs WARDEN's copy on the DSX; nothing runs in tmux on the DSX. Because WARDEN itself is in tmux on the Anvil, a dropped SSH session doesn't stop the salt call. salt waits up to 120 minutes for one job. If you press Ctrl-C while waiting, WARDEN stops waiting; the job may still finish on the DSX. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
 
 **Choosing targets.** With the Hammerspace tool, menu 2 lists the shares in `/mnt/smb-data-portal` on the DSX (hidden folders such as `.snapshot` left out). Pick one, then:
 
@@ -130,7 +130,7 @@ From the Anvil, each DSX job runs in a tmux session called `warden-<job id>` on 
   Use: Lab/Smith
 ```
 
-**Paths.** On the Anvil a share is `/hs/<share>/...`; on a DSX the same share is `/mnt/smb-data-portal/<share>/...`. WARDEN works with the DSX path and shows the Anvil one next to it. A typed path can use either form. The share list and folder browsing use a plain directory listing through salt; only getrichacl / setrichacl jobs run in tmux on the DSX.
+**Paths.** On the Anvil a share is `/hs/<share>/...`; on a DSX the same share is `/mnt/smb-data-portal/<share>/...`. WARDEN works with the DSX path and shows the Anvil one next to it. A typed path can use either form. The share list and folder browsing use a plain directory listing through salt; getrichacl / setrichacl only ever run on the DSX.
 
 **On the DSX**, WARDEN keeps its files in `/var/tmp/hs-warden/`:
 
@@ -336,13 +336,13 @@ Environment: `HS_WARDEN_HOME` (log folder), `EDITOR` / `VISUAL` (editor for menu
 | Message | What to do |
 |---|---|
 | `richacl … unavailable: run WARDEN on a Hammerspace Anvil or DSX` | Run it on the active Anvil or a DSX. |
-| `… unavailable: needs tmux` | Install tmux on that node, or start WARDEN inside tmux. |
+| `… unavailable: needs tmux` | Install tmux on the Anvil (or the DSX you run WARDEN on), or start WARDEN inside tmux. |
 | `No DSX nodes answered salt` | Run on the active Anvil (`systemctl status salt-master`), and check `salt '*' test.ping`. |
-| `dsx1 is missing: tmux` (or getrichacl …) | Install the missing tool on that DSX. |
+| `dsx1 is missing: getrichacl` (or setrichacl, python3) | Install the missing tool on that DSX. |
 | `salt-cp did not deliver the agent` | Check free space and permissions on `/var/tmp` on the DSX. |
 | `skipped: changed since it was read` | Someone else changed that object after your preview. View it again and redo the change. |
 | `Stopped at N objects (--max-items N)` | Narrow the target, or rerun with a larger `--max-items`. |
-| `The job … ended without a result` | WARDEN prints diagnostics from the DSX (job log, job folder, tmux, python3, agent version, user, /tmp). The job log is `/var/tmp/hs-warden/jobs/<id>.result.log`. |
+| `The job … ended without a result` | WARDEN prints diagnostics from the DSX (salt output, job log, job folder, python3, agent version, user, /var/tmp). The job log is `/var/tmp/hs-warden/jobs/<id>.result.log`. |
 | `Change … was made from <host>; run the undo there` | Undo on the host that made the change (its log folder has the snapshot). |
 
 ## Versioning

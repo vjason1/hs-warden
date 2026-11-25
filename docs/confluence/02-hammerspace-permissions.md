@@ -1,11 +1,11 @@
-# hs-warden: Hammerspace Permissions (DSX, Anvil, salt and tmux)
+# hs-warden: Hammerspace Permissions (DSX, Anvil and salt)
 
 This article covers using hs-warden with the Hammerspace tools `getrichacl` and `setrichacl`.
 
 ## The rules hs-warden follows
 
 1. **getrichacl / setrichacl run only on a DSX node.** A DSX is a node whose salt grain `pd-node-type` is `dsx`.
-2. **Everything runs inside tmux** on Hammerspace nodes, so a dropped SSH session doesn't interrupt a change.
+2. **The hs-warden session runs inside tmux** on the Anvil (or on the DSX when you run it there), so a dropped SSH session doesn't interrupt a change. Jobs sent to a DSX through salt don't use tmux on the DSX.
 3. **Only the DACL is read and changed.** The SACL (audit/alarm) isn't touched.
 
 ## Two ways to run it
@@ -31,7 +31,7 @@ python3 /home/serviceadmin/hs-warden.py
 - hs-warden detects the Anvil (Salt master running) and restarts itself in tmux.
 - Choose **1 – Choose permission tool → Hammerspace richacl [via salt]**.
 - Pick the DSX that will run the commands (listed from salt; picked for you if there is only one).
-- hs-warden checks the DSX has `tmux`, `python3`, `getrichacl` and `setrichacl`, then copies itself to `/var/tmp/hs-warden/hs-warden.py` on the DSX with `salt-cp`. It only copies again when the Anvil's copy changes.
+- hs-warden checks the DSX has `python3`, `getrichacl` and `setrichacl`, then copies itself to `/var/tmp/hs-warden/hs-warden.py` on the DSX with `salt-cp`. It only copies again when the Anvil's copy changes.
 
 ## Choosing the target (menu 2)
 
@@ -68,18 +68,21 @@ Up to 60 sub-folders are listed; type a name to open one beyond that. Hidden fol
 
 hs-warden works with the DSX path and shows the Anvil path next to it. A typed full path can use either form.
 
-> **Note:** listing shares and folders is a plain directory listing through salt. getrichacl / setrichacl only ever run in tmux on the DSX.
+> **Note:** listing shares and folders is a plain directory listing through salt. getrichacl / setrichacl only ever run on the DSX.
 
 ## What happens on the DSX when you work from the Anvil
 
-Each read or change is a **job**:
+Each read or change is a **job**, run with one salt `cmd.run` call:
 
-1. The job is written to `/var/tmp/hs-warden/jobs/<id>.json` on the DSX.
-2. salt starts it in a **detached tmux session** on the DSX, named `warden-<id>`. The tmux server is started in its own systemd scope (`systemd-run --scope`), or with salt `cmd.run_bg`, so it survives the salt call; hs-warden checks the job really started and switches method if not. It runs on hs-warden's own tmux server (`tmux -L hs-warden ls` lists them; `tmux -L hs-warden attach -t warden-<id>` attaches).
-3. The Anvil checks for the result every couple of seconds and shows a timer.
-4. The result is collected and the job files are removed.
+1. The job is written to `/var/tmp/hs-warden/jobs/<id>.json` on the DSX (by salt-cp for very large jobs).
+2. The copy of hs-warden on the DSX runs it: getrichacl / setrichacl on each object.
+3. The result comes back in the salt output, and the job files are removed.
 
-If you press **Ctrl-C** while waiting, hs-warden tells you the tmux session and result file on the DSX and asks whether to keep waiting. The job keeps running either way. If you stop waiting for a change, it is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
+Nothing runs in tmux on the DSX. hs-warden itself runs in tmux on the Anvil, so if your SSH session drops, the salt call keeps going; reattach with `tmux attach -t hs-warden`. salt waits up to 120 minutes for one job.
+
+If you press **Ctrl-C** while waiting, hs-warden stops waiting but the job may still finish on the DSX. A change you stop waiting for is logged as **UNCONFIRMED** with its before-snapshot, so it can still be undone.
+
+If a job ends without a result, hs-warden shows diagnostics from the DSX: the salt output, the job log, the job folder, python3 and agent versions, the user and /var/tmp.
 
 Each change made on a DSX is also recorded there, in `/var/tmp/hs-warden/agent.log` (change id, who, from which host, paths).
 
@@ -148,12 +151,12 @@ Just before writing, it reads the ACL again. If it changed since the preview, th
 
 ## Saving instead of applying
 
-At the preview, **s** saves the commands as a bash script in `~/.hs-warden/plans/` on the host you ran hs-warden on. For salt work the script header says which DSX to run it on, and the paths are DSX paths. Run it inside tmux on that DSX.
+At the preview, **s** saves the commands as a bash script in `~/.hs-warden/plans/` on the host you ran hs-warden on. For salt work the script header says which DSX to run it on, and the paths are DSX paths. Run it as root on that DSX (inside tmux for a long change).
 
 ## Requirements checklist
 
 - [ ] Running on the active Anvil (salt-master running) or on a DSX
-- [ ] tmux installed on the Anvil and on the DSX
+- [ ] tmux installed on the Anvil
 - [ ] getrichacl and setrichacl on the DSX
 - [ ] python3 on the DSX
 - [ ] `salt '*' test.ping` answers from the DSX

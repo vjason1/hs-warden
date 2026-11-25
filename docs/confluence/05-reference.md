@@ -132,13 +132,13 @@ On a DSX used through salt (`/var/tmp/hs-warden`):
 | Message | What to do |
 |---|---|
 | richacl unavailable: run WARDEN on a Hammerspace Anvil or DSX | Run it on the active Anvil or a DSX. |
-| unavailable: needs tmux | Install tmux, or start hs-warden inside tmux. |
+| unavailable: needs tmux | Install tmux on the Anvil (or the DSX you run hs-warden on), or start hs-warden inside tmux. |
 | nfs4_getfacl / nfs4_setfacl not installed | Install nfs4-acl-tools. |
 | No DSX nodes answered salt | Run on the active Anvil (`systemctl status salt-master`); check `salt '*' test.ping`. |
-| \<dsx\> is missing: tmux (or getrichacl, …) | Install the missing tool on that DSX. |
+| \<dsx\> is missing: getrichacl (or setrichacl, python3) | Install the missing tool on that DSX. |
 | salt-cp did not deliver the agent | Check space and permissions in /var/tmp on the DSX. |
 | skipped: changed since it was read | Another change happened after your preview. View it again and redo the change. |
 | Stopped at N objects (--max-items N) | Narrow the target or raise --max-items. |
-| The job … ended without a result | Diagnostics from the DSX are shown (job log, job folder, tmux, python3, agent version, user, /tmp). The job log is /var/tmp/hs-warden/jobs/\<id\>.result.log. |
+| The job … ended without a result | Diagnostics from the DSX are shown (salt output, job log, job folder, python3, agent version, user, /var/tmp). The job log is /var/tmp/hs-warden/jobs/\<id\>.result.log. |
 | Change … was made from \<host\>; run the undo there | Undo on the host that made the change. |
 | Operation to request attribute not supported (NFSv4) | The path isn't on an NFSv4 mount with ACL support. |

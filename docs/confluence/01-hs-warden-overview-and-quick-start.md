@@ -1,6 +1,6 @@
 # hs-warden: Overview and Quick Start
 
-**W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator** (current version: 1.3.0; run `python3 hs-warden.py -v`)
+**W.A.R.D.E.N. — Wide-spectrum Access Rights & Directory Enforcement Navigator** (current version: 1.4.0; run `python3 hs-warden.py -v`)
 
 ## What it is
 
@@ -21,13 +21,13 @@ Every change follows the same cycle: **read → plan → preview → confirm →
 - **Nothing changes without a preview.** You see the before and after, how many objects will change, and the exact native commands.
 - **Every change is logged and can be undone.** A snapshot of each object's ACL is saved before the change.
 - **Migration checks.** Compare permissions between a source tree and its migrated copy, even when they are read with different tools.
-- **Hammerspace-safe.** Hammerspace tools only run on DSX nodes, always inside tmux.
+- **Hammerspace-safe.** Hammerspace tools only run on DSX nodes; the hs-warden session runs inside tmux on the Anvil.
 
 ## Requirements
 
 - Python 3.6 or later (Anvil and DSX nodes ship Python 3.6.8). Standard library only.
 - The tool you want to use, on the host that runs it.
-- For Hammerspace: run on the active Anvil (Salt master) or on a DSX, with tmux installed.
+- For Hammerspace: run on the active Anvil (Salt master, with tmux) or on a DSX.
 
 ## Getting it
 
@@ -102,7 +102,7 @@ Use `--log-dir DIR` or the `HS_WARDEN_HOME` variable to keep them elsewhere.
 
 ## Related articles
 
-- hs-warden: Hammerspace Permissions (DSX, Anvil, salt and tmux)
+- hs-warden: Hammerspace Permissions (DSX, Anvil and salt)
 - hs-warden: Migration Permission Check (Compare)
 - hs-warden: Preview, Change Log and Undo
 - hs-warden: Reference (levels, rights mapping, options, troubleshooting)
